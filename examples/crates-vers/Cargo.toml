@@ -1,0 +1,14 @@
+[package]
+name = "crates-vers"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rayon="1"
+indicatif = {version = "0.17.7", features = ["rayon"]}
+crates-index = { version = "2.3", features = ["git", "git-https", "parallel"]}
+semver="1"
+semver-pubgrub = { path = "../../" }
+pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
