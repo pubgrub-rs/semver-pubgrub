@@ -4,7 +4,7 @@ The semver crate defines for the Cargo ecosystem when a version like `1.2.3-alph
 
 We work very hard to make sure that `SemverPubgrub` `contains` a `Version` if and only if the `VersionReq` `matches` the `Version`. Where possible, the logic in this library matches (and links back to) the structure of the code in the semver crate. The goal is to be exactly compatible.
 
-We have code that [checks this](examples/crates-vers/src/main.rs) for all versions currently on crates.io. But crates.io is not particularly creative with its versions or their requirements, so we also have fuzz testing (still to be published). Unfortunately this fuzz testing is not available on Windows, so we also have proptest and snapshot testing (still to be written).
+We have code that [checks this](examples/crates-vers/src/main.rs) for all versions currently on crates.io. But crates.io is not particularly creative with its versions or their requirements, so we also have [fuzz testing](fuzz/fuzz_targets). Unfortunately this fuzz testing is not available on Windows, so we also have proptest and snapshot testing (still to be written).
 
 
 ## Contributing
