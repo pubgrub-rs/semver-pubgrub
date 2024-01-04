@@ -83,22 +83,22 @@ impl VersionSet for SemverPubgrub {
 
 impl From<&VersionReq> for SemverPubgrub {
     fn from(req: &VersionReq) -> Self {
-        let mut normal = Range::full();
+        let mut out = SemverPubgrub::full();
         // add to normal the intersection of cmps in req
         for cmp in &req.comparators {
-            normal = normal.intersection(&matches_impl(cmp));
+            out = out.intersection(&matches_impl(cmp));
         }
         let mut pre = Range::empty();
         // add to pre the union of cmps in req
         for cmp in &req.comparators {
             pre = pre.union(&pre_is_compatible(cmp));
         }
-        pre = pre.intersection(&normal);
-        Self { normal, pre }
+        out.pre = pre.intersection(&out.pre);
+        out
     }
 }
 
-fn matches_impl(cmp: &Comparator) -> Range<Version> {
+fn matches_impl(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L30
     match cmp.op {
         Op::Exact | Op::Wildcard => matches_exact(cmp),
@@ -112,10 +112,10 @@ fn matches_impl(cmp: &Comparator) -> Range<Version> {
     }
 }
 
-fn matches_exact(cmp: &Comparator) -> Range<Version> {
+fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L44
     if !cmp.pre.is_empty() {
-        return Range::singleton(Version {
+        return SemverPubgrub::singleton(Version {
             major: cmp.major,
             minor: cmp.minor.expect("pre without minor"),
             patch: cmp.patch.expect("pre without patch"),
@@ -124,7 +124,7 @@ fn matches_exact(cmp: &Comparator) -> Range<Version> {
         });
     }
     if let Some(patch) = cmp.patch {
-        return Range::between(
+        let normal = Range::between(
             Version {
                 major: cmp.major,
                 minor: cmp.minor.expect("patch without minor"),
@@ -138,9 +138,13 @@ fn matches_exact(cmp: &Comparator) -> Range<Version> {
                 patch.saturating_add(1),
             ),
         );
+        return SemverPubgrub {
+            normal,
+            pre: Range::empty(),
+        };
     }
     if let Some(minor) = cmp.minor {
-        return Range::between(
+        let normal = Range::between(
             Version {
                 major: cmp.major,
                 minor,
@@ -150,83 +154,109 @@ fn matches_exact(cmp: &Comparator) -> Range<Version> {
             },
             Version::new(cmp.major, minor.saturating_add(1), 0),
         );
+        return SemverPubgrub {
+            normal,
+            pre: Range::empty(),
+        };
     }
-    Range::between(
+    let normal = Range::between(
         Version::new(cmp.major, 0, 0),
         Version::new(cmp.major.saturating_add(1), 0, 0),
-    )
+    );
+    SemverPubgrub {
+        normal,
+        pre: Range::empty(),
+    }
 }
 
-fn matches_greater(cmp: &Comparator) -> Range<Version> {
+fn matches_greater(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L64
-    Range::strictly_higher_than(Version {
+    let out = Range::strictly_higher_than(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(!0),
         patch: cmp.patch.unwrap_or(!0),
         pre: cmp.pre.clone(),
         build: BuildMetadata::EMPTY,
-    })
+    });
+    SemverPubgrub {
+        normal: out.clone(),
+        pre: out,
+    }
 }
 
-fn matches_less(cmp: &Comparator) -> Range<Version> {
+fn matches_less(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L90
-    Range::strictly_lower_than(Version {
+    let out = Range::strictly_lower_than(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
-        pre: cmp.pre.clone(),
+        pre: if cmp.patch.is_some() {
+            cmp.pre.clone()
+        } else {
+            Prerelease::new("0").unwrap()
+        },
         build: BuildMetadata::EMPTY,
-    })
+    });
+    SemverPubgrub {
+        normal: out.clone(),
+        pre: out,
+    }
 }
 
-fn matches_tilde(cmp: &Comparator) -> Range<Version> {
+fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L116
-    if !cmp.pre.is_empty() {
-        return Range::between(
+    if let Some(patch) = cmp.patch {
+        let out = Range::between(
             Version {
                 major: cmp.major,
-                minor: cmp.minor.expect("pre without minor"),
-                patch: cmp.patch.expect("pre without patch"),
+                minor: cmp.minor.expect("patch without minor"),
+                patch,
                 pre: cmp.pre.clone(),
                 build: BuildMetadata::EMPTY,
             },
-            Version::new(
-                cmp.major,
-                cmp.minor.expect("pre without minor").saturating_add(1),
-                0,
-            ),
-        );
-    }
-    if let Some(patch) = cmp.patch {
-        return Range::between(
-            Version::new(cmp.major, cmp.minor.expect("patch without minor"), patch),
             Version::new(
                 cmp.major,
                 cmp.minor.expect("patch without minor").saturating_add(1),
                 0,
             ),
         );
+        return SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        };
     }
     if let Some(minor) = cmp.minor {
-        return Range::between(
+        let normal = Range::between(
             Version::new(cmp.major, minor, 0),
             Version::new(cmp.major, minor.saturating_add(1), 0),
         );
+        return SemverPubgrub {
+            normal,
+            pre: Range::empty(),
+        };
     }
-    Range::between(
+    let normal = Range::between(
         Version::new(cmp.major, 0, 0),
         Version::new(cmp.major.saturating_add(1), 0, 0),
-    )
+    );
+    SemverPubgrub {
+        normal,
+        pre: Range::empty(),
+    }
 }
 
-fn matches_caret(cmp: &Comparator) -> Range<Version> {
+fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L136
     let minor = match cmp.minor {
         None => {
-            return Range::between(
+            let out = Range::between(
                 Version::new(cmp.major, 0, 0),
                 Version::new(cmp.major.saturating_add(1), 0, 0),
-            )
+            );
+            return SemverPubgrub {
+                normal: out.clone(),
+                pre: out,
+            };
         }
         Some(minor) => minor,
     };
@@ -234,21 +264,29 @@ fn matches_caret(cmp: &Comparator) -> Range<Version> {
     let patch = match cmp.patch {
         None => {
             if cmp.major > 0 {
-                return Range::between(
+                let out = Range::between(
                     Version::new(cmp.major, minor, 0),
                     Version::new(cmp.major.saturating_add(1), 0, 0),
                 );
+                return SemverPubgrub {
+                    normal: out.clone(),
+                    pre: out,
+                };
             } else {
-                return Range::between(
+                let out = Range::between(
                     Version::new(cmp.major, minor, 0),
                     Version::new(cmp.major, minor.saturating_add(1), 0),
                 );
+                return SemverPubgrub {
+                    normal: out.clone(),
+                    pre: out,
+                };
             }
         }
         Some(patch) => patch,
     };
     if cmp.major > 0 {
-        Range::between(
+        let out = Range::between(
             {
                 let major = cmp.major;
                 Version {
@@ -260,9 +298,13 @@ fn matches_caret(cmp: &Comparator) -> Range<Version> {
                 }
             },
             Version::new(cmp.major.saturating_add(1), 0, 0),
-        )
+        );
+        SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        }
     } else if minor > 0 {
-        Range::between(
+        let out = Range::between(
             Version {
                 major: 0,
                 minor,
@@ -271,9 +313,13 @@ fn matches_caret(cmp: &Comparator) -> Range<Version> {
                 build: BuildMetadata::EMPTY,
             },
             Version::new(0, minor.saturating_add(1), 0),
-        )
+        );
+        SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        }
     } else {
-        Range::between(
+        let out = Range::between(
             Version {
                 major: 0,
                 minor: 0,
@@ -282,7 +328,11 @@ fn matches_caret(cmp: &Comparator) -> Range<Version> {
                 build: BuildMetadata::EMPTY,
             },
             Version::new(0, 0, patch.saturating_add(1)),
-        )
+        );
+        SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        }
     }
 }
 
@@ -304,5 +354,48 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
         )
     } else {
         Range::empty()
+    }
+}
+
+#[test]
+fn test_contains_pre() {
+    for raw_req in [
+        "=0, <=0.0.1-z0",
+        "=1, <=1.0.1-z0",
+        "<1, <=0.0.1-z0",
+        "<1.1, <=1.0.1-z0",
+        "<=1, <=0.0.1-z0",
+        "<=1.1, <=1.0.1-z0",
+        ">0, <=0.0.1-z0",
+        ">1, <=1.0.1-z0",
+        ">=0, <=0.0.1-z0",
+        ">=1, <=1.0.1-z0",
+        "~0, <=0.0.1-z0",
+        "~1, <=1.0.1-z0",
+        "~0.0, <=0.0.1-z0",
+        "~1.0, <=1.0.1-z0",
+        "~0.0.1, <=0.0.1-z0",
+        "~1.0.1, <=1.0.1-z0",
+        "^0, <=0.0.1-z0",
+        "^1, <=1.0.1-z0",
+        "^0.0, <=0.0.1-z0",
+        "^1.0, <=1.0.1-z0",
+        "^0.0.1, <=0.0.1-z0",
+        "^1.0.1, <=1.0.1-z0",
+        "^0.9.8-r",
+        "^0.9.8-r, >0.8",
+        "~0.9.8-r, ~0.9.1",
+    ] {
+        let req = semver::VersionReq::parse(raw_req).unwrap();
+        let pver: SemverPubgrub = (&req).into();
+        for raw_ver in ["0.0.1-z0", "0.9.8-z", "1.0.1-z0"] {
+            let ver = semver::Version::parse(raw_ver).unwrap();
+            if req.matches(&ver) != pver.contains(&ver) {
+                eprintln!("{}", ver);
+                eprintln!("{}", req);
+                dbg!(&pver);
+                assert_eq!(req.matches(&ver), pver.contains(&ver));
+            }
+        }
     }
 }
