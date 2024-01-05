@@ -23,7 +23,13 @@ members = ["."]
 debug = 1
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "contains"
+path = "fuzz_targets/contains.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "intersection"
+path = "fuzz_targets/intersection.rs"
 test = false
 doc = false

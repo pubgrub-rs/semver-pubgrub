@@ -3,7 +3,7 @@ use libfuzzer_sys::fuzz_target;
 use pubgrub::version_set::VersionSet;
 use semver_pubgrub::SemverPubgrub;
 
-// cargo fuzz run fuzz_target_1 -- -only_ascii=1
+// cargo fuzz run contains
 
 fuzz_target!(|v: [&str; 2]| {
     let Ok(req) = semver::VersionReq::parse(&v[0]) else {
