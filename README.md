@@ -7,6 +7,10 @@ We work very hard to make sure that `SemverPubgrub` `contains` a `Version` if an
 We have code that [checks this](examples/crates-vers/src/main.rs) for all versions currently on crates.io. But crates.io is not particularly creative with its versions or their requirements, so we also have [fuzz testing](fuzz/fuzz_targets). Unfortunately this fuzz testing is not available on Windows, so we also have proptest and snapshot testing (still to be written).
 
 
+## To the maintainers of the semver crate, thank you!
+This project is built on the wonderful work in the semver crate. Full credit and appreciation to the [semver contributors](https://github.com/dtolnay/semver/graphs/contributors).
+All parsing as well as the semantics of `matches`/`contains` are developed and maintained in that semver crate. That crate is available under "MIT OR Apache-2.0" licensing.
+
 ## Contributing
 
 Discussion and development happens here on GitHub and on our
