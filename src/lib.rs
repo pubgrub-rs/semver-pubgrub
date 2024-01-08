@@ -247,46 +247,40 @@ fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
 
 fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L136
-    let minor = match cmp.minor {
-        None => {
+    let Some(minor) = cmp.minor else {
+        let out = Range::between(
+            Version::new(cmp.major, 0, 0),
+            Version::new(cmp.major.saturating_add(1), 0, 0),
+        );
+        return SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        };
+    };
+
+    let Some(patch) = cmp.patch else {
+        if cmp.major > 0 {
             let out = Range::between(
-                Version::new(cmp.major, 0, 0),
+                Version::new(cmp.major, minor, 0),
                 Version::new(cmp.major.saturating_add(1), 0, 0),
             );
             return SemverPubgrub {
                 normal: out.clone(),
                 pre: out,
             };
+        } else {
+            let out = Range::between(
+                Version::new(cmp.major, minor, 0),
+                Version::new(cmp.major, minor.saturating_add(1), 0),
+            );
+            return SemverPubgrub {
+                normal: out.clone(),
+                pre: out,
+            };
         }
-        Some(minor) => minor,
     };
-
-    let patch = match cmp.patch {
-        None => {
-            if cmp.major > 0 {
-                let out = Range::between(
-                    Version::new(cmp.major, minor, 0),
-                    Version::new(cmp.major.saturating_add(1), 0, 0),
-                );
-                return SemverPubgrub {
-                    normal: out.clone(),
-                    pre: out,
-                };
-            } else {
-                let out = Range::between(
-                    Version::new(cmp.major, minor, 0),
-                    Version::new(cmp.major, minor.saturating_add(1), 0),
-                );
-                return SemverPubgrub {
-                    normal: out.clone(),
-                    pre: out,
-                };
-            }
-        }
-        Some(patch) => patch,
-    };
-    if cmp.major > 0 {
-        let out = Range::between(
+    let out = if cmp.major > 0 {
+        Range::between(
             {
                 let major = cmp.major;
                 Version {
@@ -298,13 +292,9 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
                 }
             },
             Version::new(cmp.major.saturating_add(1), 0, 0),
-        );
-        SemverPubgrub {
-            normal: out.clone(),
-            pre: out,
-        }
+        )
     } else if minor > 0 {
-        let out = Range::between(
+        Range::between(
             Version {
                 major: 0,
                 minor,
@@ -313,13 +303,9 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
                 build: BuildMetadata::EMPTY,
             },
             Version::new(0, minor.saturating_add(1), 0),
-        );
-        SemverPubgrub {
-            normal: out.clone(),
-            pre: out,
-        }
+        )
     } else {
-        let out = Range::between(
+        Range::between(
             Version {
                 major: 0,
                 minor: 0,
@@ -328,11 +314,11 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
                 build: BuildMetadata::EMPTY,
             },
             Version::new(0, 0, patch.saturating_add(1)),
-        );
-        SemverPubgrub {
-            normal: out.clone(),
-            pre: out,
-        }
+        )
+    };
+    SemverPubgrub {
+        normal: out.clone(),
+        pre: out,
     }
 }
 
@@ -341,20 +327,20 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
     if cmp.pre.is_empty() {
         return Range::empty();
     }
-    if let (Some(minor), Some(patch)) = (cmp.minor, cmp.patch) {
-        Range::between(
-            Version {
-                major: cmp.major,
-                minor,
-                patch,
-                pre: Prerelease::new("0").unwrap(),
-                build: BuildMetadata::EMPTY,
-            },
-            Version::new(cmp.major, minor, patch),
-        )
-    } else {
-        Range::empty()
-    }
+    let (Some(minor), Some(patch)) = (cmp.minor, cmp.patch) else {
+        return Range::empty();
+    };
+
+    Range::between(
+        Version {
+            major: cmp.major,
+            minor,
+            patch,
+            pre: Prerelease::new("0").unwrap(),
+            build: BuildMetadata::EMPTY,
+        },
+        Version::new(cmp.major, minor, patch),
+    )
 }
 
 #[test]
