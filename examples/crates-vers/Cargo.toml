@@ -12,3 +12,4 @@ crates-index = { version = "2.3", features = ["git", "git-https", "parallel"]}
 semver="1"
 semver-pubgrub = { path = "../../" }
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
+hibitset = "0.6.4"
