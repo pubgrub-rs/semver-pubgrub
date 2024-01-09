@@ -123,46 +123,47 @@ fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
             build: BuildMetadata::EMPTY,
         });
     }
+    let low = Version {
+        major: cmp.major,
+        minor: cmp.minor.unwrap_or(0),
+        patch: cmp.patch.unwrap_or(0),
+        pre: Prerelease::EMPTY,
+        build: BuildMetadata::EMPTY,
+    };
     if let Some(patch) = cmp.patch {
-        let normal = Range::between(
-            Version {
-                major: cmp.major,
-                minor: cmp.minor.expect("patch without minor"),
-                patch,
-                pre: Prerelease::EMPTY,
-                build: BuildMetadata::EMPTY,
+        let minor = cmp.minor.expect("patch without minor");
+        let normal = match patch.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(cmp.major, minor, new)),
+            None => match minor.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(cmp.major, new, 0)),
+                None => match cmp.major.checked_add(1) {
+                    Some(new) => Range::between(low, Version::new(new, 0, 0)),
+                    None => Range::higher_than(low),
+                },
             },
-            Version::new(
-                cmp.major,
-                cmp.minor.expect("patch without minor"),
-                patch.saturating_add(1),
-            ),
-        );
+        };
         return SemverPubgrub {
             normal,
             pre: Range::empty(),
         };
     }
     if let Some(minor) = cmp.minor {
-        let normal = Range::between(
-            Version {
-                major: cmp.major,
-                minor,
-                patch: 0,
-                pre: Prerelease::EMPTY,
-                build: BuildMetadata::EMPTY,
+        let normal = match minor.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(cmp.major, new, 0)),
+            None => match cmp.major.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(new, 0, 0)),
+                None => Range::higher_than(low),
             },
-            Version::new(cmp.major, minor.saturating_add(1), 0),
-        );
+        };
         return SemverPubgrub {
             normal,
             pre: Range::empty(),
         };
     }
-    let normal = Range::between(
-        Version::new(cmp.major, 0, 0),
-        Version::new(cmp.major.saturating_add(1), 0, 0),
-    );
+    let normal = match cmp.major.checked_add(1) {
+        Some(new) => Range::between(low, Version::new(new, 0, 0)),
+        None => Range::higher_than(low),
+    };
     SemverPubgrub {
         normal,
         pre: Range::empty(),
@@ -205,40 +206,44 @@ fn matches_less(cmp: &Comparator) -> SemverPubgrub {
 
 fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L116
-    if let Some(patch) = cmp.patch {
-        let out = Range::between(
-            Version {
-                major: cmp.major,
-                minor: cmp.minor.expect("patch without minor"),
-                patch,
-                pre: cmp.pre.clone(),
-                build: BuildMetadata::EMPTY,
+    let low = Version {
+        major: cmp.major,
+        minor: cmp.minor.unwrap_or(0),
+        patch: cmp.patch.unwrap_or(0),
+        pre: cmp.pre.clone(),
+        build: BuildMetadata::EMPTY,
+    };
+    if cmp.patch.is_some() {
+        let minor = cmp.minor.expect("patch without minor");
+        let out = match minor.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(cmp.major, new, 0)),
+            None => match cmp.major.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(new, 0, 0)),
+                None => Range::higher_than(low),
             },
-            Version::new(
-                cmp.major,
-                cmp.minor.expect("patch without minor").saturating_add(1),
-                0,
-            ),
-        );
+        };
         return SemverPubgrub {
             normal: out.clone(),
             pre: out,
         };
     }
     if let Some(minor) = cmp.minor {
-        let normal = Range::between(
-            Version::new(cmp.major, minor, 0),
-            Version::new(cmp.major, minor.saturating_add(1), 0),
-        );
+        let normal = match minor.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(cmp.major, new, 0)),
+            None => match cmp.major.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(new, 0, 0)),
+                None => Range::higher_than(low),
+            },
+        };
         return SemverPubgrub {
             normal,
             pre: Range::empty(),
         };
     }
-    let normal = Range::between(
-        Version::new(cmp.major, 0, 0),
-        Version::new(cmp.major.saturating_add(1), 0, 0),
-    );
+    let normal = match cmp.major.checked_add(1) {
+        Some(new) => Range::between(low, Version::new(new, 0, 0)),
+        None => Range::higher_than(low),
+    };
     SemverPubgrub {
         normal,
         pre: Range::empty(),
@@ -247,11 +252,18 @@ fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
 
 fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L136
+    let low = Version {
+        major: cmp.major,
+        minor: cmp.minor.unwrap_or(0),
+        patch: cmp.patch.unwrap_or(0),
+        pre: cmp.pre.clone(),
+        build: BuildMetadata::EMPTY,
+    };
     let Some(minor) = cmp.minor else {
-        let out = Range::between(
-            Version::new(cmp.major, 0, 0),
-            Version::new(cmp.major.saturating_add(1), 0, 0),
-        );
+        let out = match cmp.major.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(new, 0, 0)),
+            None => Range::higher_than(low),
+        };
         return SemverPubgrub {
             normal: out.clone(),
             pre: out,
@@ -259,62 +271,37 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     };
 
     let Some(patch) = cmp.patch else {
-        if cmp.major > 0 {
-            let out = Range::between(
-                Version::new(cmp.major, minor, 0),
-                Version::new(cmp.major.saturating_add(1), 0, 0),
-            );
-            return SemverPubgrub {
-                normal: out.clone(),
-                pre: out,
-            };
+        let out = if cmp.major > 0 {
+            match cmp.major.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(new, 0, 0)),
+                None => Range::higher_than(low),
+            }
         } else {
-            let out = Range::between(
-                Version::new(cmp.major, minor, 0),
-                Version::new(cmp.major, minor.saturating_add(1), 0),
-            );
-            return SemverPubgrub {
-                normal: out.clone(),
-                pre: out,
-            };
-        }
+            match minor.checked_add(1) {
+                Some(new) => Range::between(low, Version::new(0, new, 0)),
+                None => Range::between(low, Version::new(1, 0, 0)),
+            }
+        };
+        return SemverPubgrub {
+            normal: out.clone(),
+            pre: out,
+        };
     };
     let out = if cmp.major > 0 {
-        Range::between(
-            {
-                let major = cmp.major;
-                Version {
-                    major,
-                    minor,
-                    patch,
-                    pre: cmp.pre.clone(),
-                    build: BuildMetadata::EMPTY,
-                }
-            },
-            Version::new(cmp.major.saturating_add(1), 0, 0),
-        )
+        match cmp.major.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(new, 0, 0)),
+            None => Range::higher_than(low),
+        }
     } else if minor > 0 {
-        Range::between(
-            Version {
-                major: 0,
-                minor,
-                patch,
-                pre: cmp.pre.clone(),
-                build: BuildMetadata::EMPTY,
-            },
-            Version::new(0, minor.saturating_add(1), 0),
-        )
+        match minor.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(0, new, 0)),
+            None => Range::between(low, Version::new(1, 0, 0)),
+        }
     } else {
-        Range::between(
-            Version {
-                major: 0,
-                minor: 0,
-                patch,
-                pre: cmp.pre.clone(),
-                build: BuildMetadata::EMPTY,
-            },
-            Version::new(0, 0, patch.saturating_add(1)),
-        )
+        match patch.checked_add(1) {
+            Some(new) => Range::between(low, Version::new(0, 0, new)),
+            None => Range::between(low, Version::new(0, 1, 0)),
+        }
     };
     SemverPubgrub {
         normal: out.clone(),
@@ -344,43 +331,56 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
 }
 
 #[test]
+fn test_into_overflow() {
+    for pre in ["^", "~", "=", "<", ">", "<=", ">="] {
+        for numbs in [
+            "0.0.18446744073709551615",
+            "0.18446744073709551615.0",
+            "0.18446744073709551615.1",
+            "0.18446744073709551615.18446744073709551615",
+            "0.18446744073709551615",
+            "18446744073709551615",
+            "18446744073709551615.0",
+            "18446744073709551615.1",
+            "18446744073709551615.18446744073709551615",
+            "18446744073709551615.18446744073709551615.0",
+            "18446744073709551615.18446744073709551615.1",
+            "18446744073709551615.18446744073709551615.18446744073709551615",
+        ] {
+            let req = semver::VersionReq::parse(&format!("{pre}{numbs}")).unwrap();
+            println!("{req}");
+            let _: SemverPubgrub = (&req).into();
+        }
+    }
+}
+
+#[test]
 fn test_contains_pre() {
-    for raw_req in [
-        "=0, <=0.0.1-z0",
-        "=1, <=1.0.1-z0",
-        "<1, <=0.0.1-z0",
-        "<1.1, <=1.0.1-z0",
-        "<=1, <=0.0.1-z0",
-        "<=1.1, <=1.0.1-z0",
-        ">0, <=0.0.1-z0",
-        ">1, <=1.0.1-z0",
-        ">=0, <=0.0.1-z0",
-        ">=1, <=1.0.1-z0",
-        "~0, <=0.0.1-z0",
-        "~1, <=1.0.1-z0",
-        "~0.0, <=0.0.1-z0",
-        "~1.0, <=1.0.1-z0",
-        "~0.0.1, <=0.0.1-z0",
-        "~1.0.1, <=1.0.1-z0",
-        "^0, <=0.0.1-z0",
-        "^1, <=1.0.1-z0",
-        "^0.0, <=0.0.1-z0",
-        "^1.0, <=1.0.1-z0",
-        "^0.0.1, <=0.0.1-z0",
-        "^1.0.1, <=1.0.1-z0",
-        "^0.9.8-r",
-        "^0.9.8-r, >0.8",
-        "~0.9.8-r, ~0.9.1",
-    ] {
-        let req = semver::VersionReq::parse(raw_req).unwrap();
-        let pver: SemverPubgrub = (&req).into();
-        for raw_ver in ["0.0.1-z0", "0.9.8-z", "1.0.1-z0"] {
-            let ver = semver::Version::parse(raw_ver).unwrap();
-            if req.matches(&ver) != pver.contains(&ver) {
-                eprintln!("{}", ver);
-                eprintln!("{}", req);
-                dbg!(&pver);
-                assert_eq!(req.matches(&ver), pver.contains(&ver));
+    for pre in ["^", "~", "<", "<=", ">", ">=", "="] {
+        for psot in [
+            "0, <=0.0.1-z0",
+            "0.0, <=0.0.1-z0",
+            "0.0.1, <=0.0.1-z0",
+            "0.9.8-r",
+            "0.9.8-r, >0.8",
+            "0.9.8-r, ~0.9.1",
+            "1, <=0.0.1-z0",
+            "1, <=1.0.1-z0",
+            "1.0, <=1.0.1-z0",
+            "1.0.1, <=1.0.1-z0",
+            "1.1, <=1.0.1-z0",
+        ] {
+            let raw_req = format!("{pre}{psot}");
+            let req = semver::VersionReq::parse(&raw_req).unwrap();
+            let pver: SemverPubgrub = (&req).into();
+            for raw_ver in ["0.0.1-z0", "0.9.8-z", "1.0.1-z0"] {
+                let ver = semver::Version::parse(raw_ver).unwrap();
+                if req.matches(&ver) != pver.contains(&ver) {
+                    eprintln!("{}", ver);
+                    eprintln!("{}", req);
+                    dbg!(&pver);
+                    assert_eq!(req.matches(&ver), pver.contains(&ver));
+                }
             }
         }
     }
