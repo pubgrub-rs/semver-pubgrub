@@ -256,7 +256,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
-        pre: cmp.pre.clone(),
+        pre: Prerelease::new("0").unwrap(),
         build: BuildMetadata::EMPTY,
     };
     let Some(minor) = cmp.minor else {
@@ -287,6 +287,11 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
             pre: out,
         };
     };
+
+    let low = Version {
+        pre: cmp.pre.clone(),
+        ..low
+    };
     let out = if cmp.major > 0 {
         match cmp.major.checked_add(1) {
             Some(new) => Range::between(low, Version::new(new, 0, 0)),
@@ -299,8 +304,26 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
         }
     } else {
         match patch.checked_add(1) {
-            Some(new) => Range::between(low, Version::new(0, 0, new)),
-            None => Range::between(low, Version::new(0, 1, 0)),
+            Some(new) => Range::between(
+                low,
+                Version {
+                    major: 0,
+                    minor: 0,
+                    patch: new,
+                    pre: Prerelease::new("0").unwrap(),
+                    build: BuildMetadata::EMPTY,
+                },
+            ),
+            None => Range::between(
+                low,
+                Version {
+                    major: 0,
+                    minor: 1,
+                    patch: 0,
+                    pre: Prerelease::new("0").unwrap(),
+                    build: BuildMetadata::EMPTY,
+                },
+            ),
         }
     };
     SemverPubgrub {
@@ -359,6 +382,7 @@ fn test_contains_pre() {
     for pre in ["^", "~", "<", "<=", ">", ">=", "="] {
         for psot in [
             "0, <=0.0.1-z0",
+            "0, ^0.0.0-0",
             "0.0, <=0.0.1-z0",
             "0.0.1, <=0.0.1-z0",
             "0.9.8-r",
@@ -369,11 +393,14 @@ fn test_contains_pre() {
             "1.0, <=1.0.1-z0",
             "1.0.1, <=1.0.1-z0",
             "1.1, <=1.0.1-z0",
+            "0.0.1-r",
+            "0.0.2-r",
+            "0.0.2-r, ^0.0.1",
         ] {
             let raw_req = format!("{pre}{psot}");
             let req = semver::VersionReq::parse(&raw_req).unwrap();
             let pver: SemverPubgrub = (&req).into();
-            for raw_ver in ["0.0.1-z0", "0.9.8-z", "1.0.1-z0"] {
+            for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
                 let ver = semver::Version::parse(raw_ver).unwrap();
                 if req.matches(&ver) != pver.contains(&ver) {
                     eprintln!("{}", ver);
