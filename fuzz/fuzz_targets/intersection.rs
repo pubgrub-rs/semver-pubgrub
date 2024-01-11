@@ -1,26 +1,44 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
+use proptest::strategy::Strategy;
+use proptest::test_runner::TestError;
+use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 use pubgrub::version_set::VersionSet;
 use semver_pubgrub::SemverPubgrub;
+use semver_pubgrub_fuzz::{req_strategy, version_strategy};
 
 // cargo fuzz run intersection
 
-fuzz_target!(|v: [&str; 3]| {
-    let Ok(req) = semver::VersionReq::parse(&v[0]) else {
-        return;
-    };
-    let pver: SemverPubgrub = (&req).into();
-    let Ok(req2) = semver::VersionReq::parse(&v[1]) else {
-        return;
-    };
-    let pver2: SemverPubgrub = (&req2).into();
-    let Ok(ver) = semver::Version::parse(&v[2]) else {
-        return;
-    };
+fn intersection(req: &semver::VersionReq, req2: &semver::VersionReq, ver: &semver::Version) {
+    let pver: SemverPubgrub = req.into();
+    let pver2: SemverPubgrub = req2.into();
 
     let inter: SemverPubgrub = pver2.intersection(&pver);
     assert_eq!(
         req.matches(&ver) && req2.matches(&ver),
         inter.contains(&ver)
     );
-});
+}
+
+fn case(seed: &[u8]) {
+    let mut test_runner = TestRunner::new_with_rng(
+        Config {
+            cases: 1,
+            failure_persistence: None,
+            ..Config::default()
+        },
+        TestRng::from_seed(RngAlgorithm::PassThrough, seed),
+    );
+    let strategy = &(req_strategy(), req_strategy(), version_strategy());
+    let new_tree = strategy.new_tree(&mut test_runner).unwrap();
+    let result = test_runner.run_one(new_tree, |v| {
+        intersection(&v.0, &v.1, &v.2);
+        Ok(())
+    });
+
+    if let Err(TestError::Fail(_, (req, req2, ver))) = result {
+        panic!("Found minimal failing case: {req} U {req2} |=> {ver}");
+    }
+}
+
+fuzz_target!(|seed: &[u8]| case(seed));

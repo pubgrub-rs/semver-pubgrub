@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 semver = "1.0.13"
+proptest = { version="1.4.0", default-features=false, features=["std"]}
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
 
 [dependencies.semver-pubgrub]
