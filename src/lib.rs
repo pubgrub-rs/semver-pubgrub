@@ -63,20 +63,10 @@ impl VersionSet for SemverPubgrub {
 
     fn contains(&self, v: &Self::V) -> bool {
         // This needs to be bug-for-bug compatible with matches_req https://github.com/dtolnay/semver/blob/master/src/eval.rs#L3
-        if v.build.is_empty() {
-            if v.pre.is_empty() {
-                self.normal.contains(v)
-            } else {
-                self.pre.contains(v)
-            }
+        if v.pre.is_empty() {
+            self.normal.contains(v)
         } else {
-            self.contains(&Version {
-                major: v.major,
-                minor: v.minor,
-                patch: v.patch,
-                pre: v.pre.clone(),
-                build: BuildMetadata::EMPTY,
-            })
+            self.pre.contains(v)
         }
     }
 }
@@ -143,6 +133,22 @@ fn bump_patch(v: &Version) -> Bound<Version> {
     }
 }
 
+fn bump_pre(v: &Version) -> Bound<Version> {
+    if !v.pre.is_empty() {
+        Bound::Excluded({
+            Version {
+                major: v.major,
+                minor: v.minor,
+                patch: v.patch,
+                pre: Prerelease::new(&format!("{}.0", v.pre)).unwrap(),
+                build: BuildMetadata::EMPTY,
+            }
+        })
+    } else {
+        bump_patch(v)
+    }
+}
+
 fn between(low: Version, into: impl Fn(&Version) -> Bound<Version>) -> Range<Version> {
     let hight = into(&low);
     Range::from_range_bounds((Bound::Included(low), hight))
@@ -172,7 +178,10 @@ fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
         build: BuildMetadata::EMPTY,
     };
     if !cmp.pre.is_empty() {
-        return SemverPubgrub::singleton(low);
+        return SemverPubgrub {
+            normal: Range::empty(),
+            pre: between(low, bump_pre),
+        };
     }
     let normal = if cmp.patch.is_some() {
         between(low, bump_patch)
@@ -190,13 +199,26 @@ fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
 
 fn matches_greater(cmp: &Comparator) -> SemverPubgrub {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L64
-    let out = Range::strictly_higher_than(Version {
+    let low = Version {
         major: cmp.major,
-        minor: cmp.minor.unwrap_or(!0),
-        patch: cmp.patch.unwrap_or(!0),
+        minor: cmp.minor.unwrap_or(0),
+        patch: cmp.patch.unwrap_or(0),
         pre: cmp.pre.clone(),
         build: BuildMetadata::EMPTY,
-    });
+    };
+    let bump = if cmp.patch.is_some() {
+        bump_pre(&low)
+    } else if cmp.minor.is_some() {
+        bump_minor(&low)
+    } else {
+        bump_major(&low)
+    };
+    let low_bound = match bump {
+        Bound::Included(_) => unreachable!(),
+        Bound::Excluded(v) => Bound::Included(v),
+        Bound::Unbounded => return SemverPubgrub::empty(),
+    };
+    let out = Range::from_range_bounds((low_bound, Bound::Unbounded));
     SemverPubgrub {
         normal: out.clone(),
         pre: out,
@@ -320,9 +342,9 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
 const OPS: &[&str] = &["^", "~", "=", "<", ">", "<=", ">="];
 
 #[test]
-fn test_into_overflow() {
+fn test_contains_overflow() {
     for op in OPS {
-        for numbs in [
+        for psot in [
             "0.0.18446744073709551615",
             "0.18446744073709551615.0",
             "0.18446744073709551615.1",
@@ -336,9 +358,19 @@ fn test_into_overflow() {
             "18446744073709551615.18446744073709551615.1",
             "18446744073709551615.18446744073709551615.18446744073709551615",
         ] {
-            let req = semver::VersionReq::parse(&format!("{op}{numbs}")).unwrap();
-            println!("{req}");
-            let _: SemverPubgrub = (&req).into();
+            let raw_req = format!("{op}{psot}");
+            let req = semver::VersionReq::parse(&raw_req).unwrap();
+            let pver: SemverPubgrub = (&req).into();
+            for raw_ver in ["18446744073709551615.1.0"] {
+                let ver = semver::Version::parse(raw_ver).unwrap();
+                let mat = req.matches(&ver);
+                if mat != pver.contains(&ver) {
+                    eprintln!("{}", ver);
+                    eprintln!("{}", req);
+                    dbg!(&pver);
+                    assert_eq!(mat, pver.contains(&ver));
+                }
+            }
         }
     }
 }
