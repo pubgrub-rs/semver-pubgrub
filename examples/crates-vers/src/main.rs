@@ -1,3 +1,4 @@
+use std::ops::RangeBounds;
 use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
@@ -112,7 +113,17 @@ fn main() {
                     dbg!(&neg);
                     assert_eq!(!req.matches(ver), neg.contains(ver));
                 }
+                let bounding_range = pver.bounding_range();
+                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                    assert!(!mat);
+                }
                 if mat {
+                    if !bounding_range.unwrap().contains(&ver) {
+                        eprintln!("{}", ver);
+                        eprintln!("{}", req);
+                        dbg!(&pver);
+                        assert!(bounding_range.unwrap().contains(&ver));
+                    }
                     bitset.add(id.try_into().unwrap());
                 }
             }
@@ -152,10 +163,16 @@ fn main() {
                             versions.len(),
                         );
                         for ver in &versions[start..end] {
-                            assert_eq!(
-                                req.matches(&ver) && req2.matches(&ver),
-                                inter.contains(ver)
-                            );
+                            let mat = req.matches(&ver) && req2.matches(&ver);
+                            assert_eq!(mat, inter.contains(ver));
+
+                            let bounding_range = inter.bounding_range();
+                            if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                                assert!(!mat);
+                            }
+                            if mat {
+                                assert!(bounding_range.unwrap().contains(&ver));
+                            }
                         }
                     }
                 }

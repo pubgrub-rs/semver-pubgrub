@@ -1,4 +1,6 @@
 #![no_main]
+use std::ops::RangeBounds;
+
 use libfuzzer_sys::fuzz_target;
 use proptest::strategy::Strategy;
 use proptest::test_runner::TestError;
@@ -13,16 +15,17 @@ fn contains(req: &semver::VersionReq, ver: &semver::Version) {
     // println!("{req} |=> {ver}");
     let pver: SemverPubgrub = req.into();
     let neg = pver.complement();
-    assert_eq!(
-        req.matches(&ver),
-        pver.contains(&ver),
-        "matches {req} |=> {ver}"
-    );
-    assert_eq!(
-        !req.matches(&ver),
-        neg.contains(&ver),
-        "!matches {req} |=> {ver}"
-    );
+    let mat = req.matches(&ver);
+    assert_eq!(mat, pver.contains(&ver), "matches {req} |=> {ver}");
+    assert_eq!(!mat, neg.contains(&ver), "!matches {req} |=> {ver}");
+
+    let bounding_range = pver.bounding_range();
+    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+        assert!(!mat);
+    }
+    if mat {
+        assert!(bounding_range.unwrap().contains(&ver));
+    }
 }
 
 fn case(seed: &[u8]) {

@@ -1,4 +1,6 @@
 #![no_main]
+use std::ops::RangeBounds;
+
 use libfuzzer_sys::fuzz_target;
 use proptest::strategy::Strategy;
 use proptest::test_runner::TestError;
@@ -14,10 +16,16 @@ fn intersection(req: &semver::VersionReq, req2: &semver::VersionReq, ver: &semve
     let pver2: SemverPubgrub = req2.into();
 
     let inter: SemverPubgrub = pver2.intersection(&pver);
-    assert_eq!(
-        req.matches(&ver) && req2.matches(&ver),
-        inter.contains(&ver)
-    );
+    let mat = req.matches(&ver) && req2.matches(&ver);
+    assert_eq!(mat, inter.contains(&ver));
+
+    let bounding_range = pver.bounding_range();
+    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+        assert!(!mat);
+    }
+    if mat {
+        assert!(bounding_range.unwrap().contains(&ver));
+    }
 }
 
 fn case(seed: &[u8]) {

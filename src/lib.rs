@@ -1,4 +1,8 @@
-use std::{fmt::Display, ops::Bound};
+use std::{
+    cmp::{max, min},
+    fmt::Display,
+    ops::{Bound, RangeBounds},
+};
 
 use pubgrub::{range::Range, version_set::VersionSet};
 use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
@@ -9,6 +13,48 @@ use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 pub struct SemverPubgrub {
     normal: Range<Version>,
     pre: Range<Version>,
+}
+
+impl SemverPubgrub {
+    /// Convert to something that can be used with
+    /// [BTreeMap::range](std::collections::BTreeMap::range).
+    /// All versions contained in self, will be in the output,
+    /// but there may be versions in the output that are not contained in self.
+    /// Returns None if the range is empty.
+    pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
+        use Bound::*;
+        match (self.normal.bounding_range(), self.pre.bounding_range()) {
+            (None, None) => None,
+            (None, Some(s)) | (Some(s), None) => Some(s),
+            (Some((ns, ne)), Some((ps, pe))) => {
+                let start = match (ns, ps) {
+                    (Included(n), Included(p)) => Included(min(n, p)),
+                    (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
+                        if e < i {
+                            Excluded(e)
+                        } else {
+                            Included(i)
+                        }
+                    }
+                    (Excluded(n), Excluded(p)) => Excluded(min(n, p)),
+                    (Unbounded, _) | (_, Unbounded) => Unbounded,
+                };
+                let end = match (ne, pe) {
+                    (Included(n), Included(p)) => Included(max(n, p)),
+                    (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
+                        if i < e {
+                            Excluded(e)
+                        } else {
+                            Included(i)
+                        }
+                    }
+                    (Excluded(n), Excluded(p)) => Excluded(max(n, p)),
+                    (Unbounded, _) | (_, Unbounded) => Unbounded,
+                };
+                Some((start, end))
+            }
+        }
+    }
 }
 
 impl Display for SemverPubgrub {
@@ -370,6 +416,14 @@ fn test_contains_overflow() {
                     dbg!(&pver);
                     assert_eq!(mat, pver.contains(&ver));
                 }
+
+                let bounding_range = pver.bounding_range();
+                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                    assert!(!mat);
+                }
+                if mat {
+                    assert!(bounding_range.unwrap().contains(&ver));
+                }
             }
         }
     }
@@ -400,11 +454,20 @@ fn test_contains_pre() {
             let pver: SemverPubgrub = (&req).into();
             for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
                 let ver = semver::Version::parse(raw_ver).unwrap();
-                if req.matches(&ver) != pver.contains(&ver) {
+                let mat = req.matches(&ver);
+                if mat != pver.contains(&ver) {
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&pver);
-                    assert_eq!(req.matches(&ver), pver.contains(&ver));
+                    assert_eq!(mat, pver.contains(&ver));
+                }
+
+                let bounding_range = pver.bounding_range();
+                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                    assert!(!mat);
+                }
+                if mat {
+                    assert!(bounding_range.unwrap().contains(&ver));
                 }
             }
         }
