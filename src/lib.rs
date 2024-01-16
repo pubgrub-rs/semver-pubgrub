@@ -1,7 +1,7 @@
 use std::{
     cmp::{max, min},
     fmt::Display,
-    ops::{Bound, RangeBounds},
+    ops::Bound,
 };
 
 use pubgrub::{range::Range, version_set::VersionSet};
@@ -385,89 +385,95 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
 }
 
 #[cfg(test)]
-const OPS: &[&str] = &["^", "~", "=", "<", ">", "<=", ">="];
+mod test {
+    use super::*;
+    use pubgrub::version_set::VersionSet;
+    use std::ops::RangeBounds;
 
-#[test]
-fn test_contains_overflow() {
-    for op in OPS {
-        for psot in [
-            "0.0.18446744073709551615",
-            "0.18446744073709551615.0",
-            "0.18446744073709551615.1",
-            "0.18446744073709551615.18446744073709551615",
-            "0.18446744073709551615",
-            "18446744073709551615",
-            "18446744073709551615.0",
-            "18446744073709551615.1",
-            "18446744073709551615.18446744073709551615",
-            "18446744073709551615.18446744073709551615.0",
-            "18446744073709551615.18446744073709551615.1",
-            "18446744073709551615.18446744073709551615.18446744073709551615",
-        ] {
-            let raw_req = format!("{op}{psot}");
-            let req = semver::VersionReq::parse(&raw_req).unwrap();
-            let pver: SemverPubgrub = (&req).into();
-            for raw_ver in ["18446744073709551615.1.0"] {
-                let ver = semver::Version::parse(raw_ver).unwrap();
-                let mat = req.matches(&ver);
-                if mat != pver.contains(&ver) {
-                    eprintln!("{}", ver);
-                    eprintln!("{}", req);
-                    dbg!(&pver);
-                    assert_eq!(mat, pver.contains(&ver));
-                }
+    const OPS: &[&str] = &["^", "~", "=", "<", ">", "<=", ">="];
 
-                let bounding_range = pver.bounding_range();
-                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                    assert!(!mat);
-                }
-                if mat {
-                    assert!(bounding_range.unwrap().contains(&ver));
+    #[test]
+    fn test_contains_overflow() {
+        for op in OPS {
+            for psot in [
+                "0.0.18446744073709551615",
+                "0.18446744073709551615.0",
+                "0.18446744073709551615.1",
+                "0.18446744073709551615.18446744073709551615",
+                "0.18446744073709551615",
+                "18446744073709551615",
+                "18446744073709551615.0",
+                "18446744073709551615.1",
+                "18446744073709551615.18446744073709551615",
+                "18446744073709551615.18446744073709551615.0",
+                "18446744073709551615.18446744073709551615.1",
+                "18446744073709551615.18446744073709551615.18446744073709551615",
+            ] {
+                let raw_req = format!("{op}{psot}");
+                let req = semver::VersionReq::parse(&raw_req).unwrap();
+                let pver: SemverPubgrub = (&req).into();
+                for raw_ver in ["18446744073709551615.1.0"] {
+                    let ver = semver::Version::parse(raw_ver).unwrap();
+                    let mat = req.matches(&ver);
+                    if mat != pver.contains(&ver) {
+                        eprintln!("{}", ver);
+                        eprintln!("{}", req);
+                        dbg!(&pver);
+                        assert_eq!(mat, pver.contains(&ver));
+                    }
+
+                    let bounding_range = pver.bounding_range();
+                    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                        assert!(!mat);
+                    }
+                    if mat {
+                        assert!(bounding_range.unwrap().contains(&ver));
+                    }
                 }
             }
         }
     }
-}
 
-#[test]
-fn test_contains_pre() {
-    for op in OPS {
-        for psot in [
-            "0, <=0.0.1-z0",
-            "0, ^0.0.0-0",
-            "0.0, <=0.0.1-z0",
-            "0.0.1, <=0.0.1-z0",
-            "0.9.8-r",
-            "0.9.8-r, >0.8",
-            "0.9.8-r, ~0.9.1",
-            "1, <=0.0.1-z0",
-            "1, <=1.0.1-z0",
-            "1.0, <=1.0.1-z0",
-            "1.0.1, <=1.0.1-z0",
-            "1.1, <=1.0.1-z0",
-            "0.0.1-r",
-            "0.0.2-r",
-            "0.0.2-r, ^0.0.1",
-        ] {
-            let raw_req = format!("{op}{psot}");
-            let req = semver::VersionReq::parse(&raw_req).unwrap();
-            let pver: SemverPubgrub = (&req).into();
-            for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
-                let ver = semver::Version::parse(raw_ver).unwrap();
-                let mat = req.matches(&ver);
-                if mat != pver.contains(&ver) {
-                    eprintln!("{}", ver);
-                    eprintln!("{}", req);
-                    dbg!(&pver);
-                    assert_eq!(mat, pver.contains(&ver));
-                }
+    #[test]
+    fn test_contains_pre() {
+        for op in OPS {
+            for psot in [
+                "0, <=0.0.1-z0",
+                "0, ^0.0.0-0",
+                "0.0, <=0.0.1-z0",
+                "0.0.1, <=0.0.1-z0",
+                "0.9.8-r",
+                "0.9.8-r, >0.8",
+                "0.9.8-r, ~0.9.1",
+                "1, <=0.0.1-z0",
+                "1, <=1.0.1-z0",
+                "1.0, <=1.0.1-z0",
+                "1.0.1, <=1.0.1-z0",
+                "1.1, <=1.0.1-z0",
+                "0.0.1-r",
+                "0.0.2-r",
+                "0.0.2-r, ^0.0.1",
+            ] {
+                let raw_req = format!("{op}{psot}");
+                let req = semver::VersionReq::parse(&raw_req).unwrap();
+                let pver: SemverPubgrub = (&req).into();
+                for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
+                    let ver = semver::Version::parse(raw_ver).unwrap();
+                    let mat = req.matches(&ver);
+                    if mat != pver.contains(&ver) {
+                        eprintln!("{}", ver);
+                        eprintln!("{}", req);
+                        dbg!(&pver);
+                        assert_eq!(mat, pver.contains(&ver));
+                    }
 
-                let bounding_range = pver.bounding_range();
-                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                    assert!(!mat);
-                }
-                if mat {
-                    assert!(bounding_range.unwrap().contains(&ver));
+                    let bounding_range = pver.bounding_range();
+                    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
+                        assert!(!mat);
+                    }
+                    if mat {
+                        assert!(bounding_range.unwrap().contains(&ver));
+                    }
                 }
             }
         }
