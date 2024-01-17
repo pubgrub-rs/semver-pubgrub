@@ -97,6 +97,7 @@ fn main() {
         .into_par_iter()
         .progress_with(style)
         .map(|(req, pver)| {
+            let bounding_range = pver.bounding_range();
             let neg = pver.complement();
             let mut bitset = BitSet::new();
             for (id, ver) in versions.iter().enumerate() {
@@ -112,10 +113,6 @@ fn main() {
                     eprintln!("{}", req);
                     dbg!(&neg);
                     assert_eq!(!req.matches(ver), neg.contains(ver));
-                }
-                let bounding_range = pver.bounding_range();
-                if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                    assert!(!mat);
                 }
                 if mat {
                     if !bounding_range.unwrap().contains(&ver) {
@@ -141,8 +138,8 @@ fn main() {
             .par_iter()
             .progress_with(style)
             .enumerate()
-            .for_each(|(i, (req, pver, bs))| {
-                for (req2, pver2, bs2) in &requirements[(i + 1)..] {
+            .for_each(|(i, (_, pver, bs))| {
+                for (_, pver2, bs2) in &requirements[(i + 1)..] {
                     let inter: SemverPubgrub = pver2.intersection(&pver);
                     assert_eq!(inter, pver.intersection(&pver2));
                     let bs_inter: BitSet = (bs & bs2).into_iter().collect();
@@ -153,25 +150,20 @@ fn main() {
                     } else if &inter == pver2 {
                         assert_eq!(&bs_inter, bs2)
                     } else {
-                        let start = (bs | bs2)
-                            .iter()
-                            .min()
-                            .unwrap_or(versions.len().try_into().unwrap())
-                            .saturating_sub(30) as usize;
+                        let start = (bs | bs2).iter().min().unwrap_or(0).saturating_sub(30);
                         let end = min(
-                            (bs | bs2).iter().max().unwrap_or(0) as usize + 30,
-                            versions.len(),
+                            (bs | bs2).iter().max().unwrap_or(!0).saturating_add(30),
+                            versions.len() as u32,
                         );
-                        for ver in &versions[start..end] {
-                            let mat = req.matches(&ver) && req2.matches(&ver);
+                        let bounding_range = inter.bounding_range().expect("inter is not empty");
+                        for id in start..end {
+                            let ver = &versions[id as usize];
+                            let mat = bs_inter.contains(id);
                             assert_eq!(mat, inter.contains(ver));
 
-                            let bounding_range = inter.bounding_range();
-                            if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                                assert!(!mat);
-                            }
-                            if mat {
-                                assert!(bounding_range.unwrap().contains(&ver));
+                            let bb_contains = bounding_range.contains(&ver);
+                            if mat && !bb_contains {
+                                unreachable!("bounding_range thinks this can not match");
                             }
                         }
                     }

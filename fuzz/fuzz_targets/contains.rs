@@ -20,11 +20,8 @@ fn contains(req: &semver::VersionReq, ver: &semver::Version) -> Result<(), TestC
     prop_assert_eq!(mat, pver.contains(&ver), "matches {} |=> {}", req, ver);
     prop_assert_eq!(!mat, neg.contains(&ver), "!matches {} |=> {}", req, ver);
 
-    let bounding_range = pver.bounding_range();
-    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-        prop_assert!(!mat);
-    }
     if mat {
+        let bounding_range = pver.bounding_range();
         prop_assert!(bounding_range.unwrap().contains(&ver));
     }
     Ok(())

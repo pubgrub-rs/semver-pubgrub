@@ -412,6 +412,7 @@ mod test {
                 let raw_req = format!("{op}{psot}");
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
                 let pver: SemverPubgrub = (&req).into();
+                let bounding_range = pver.bounding_range();
                 for raw_ver in ["18446744073709551615.1.0"] {
                     let ver = semver::Version::parse(raw_ver).unwrap();
                     let mat = req.matches(&ver);
@@ -422,10 +423,6 @@ mod test {
                         assert_eq!(mat, pver.contains(&ver));
                     }
 
-                    let bounding_range = pver.bounding_range();
-                    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                        assert!(!mat);
-                    }
                     if mat {
                         assert!(bounding_range.unwrap().contains(&ver));
                     }
@@ -457,6 +454,7 @@ mod test {
                 let raw_req = format!("{op}{psot}");
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
                 let pver: SemverPubgrub = (&req).into();
+                let bounding_range = pver.bounding_range();
                 for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
                     let ver = semver::Version::parse(raw_ver).unwrap();
                     let mat = req.matches(&ver);
@@ -467,10 +465,6 @@ mod test {
                         assert_eq!(mat, pver.contains(&ver));
                     }
 
-                    let bounding_range = pver.bounding_range();
-                    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-                        assert!(!mat);
-                    }
                     if mat {
                         assert!(bounding_range.unwrap().contains(&ver));
                     }

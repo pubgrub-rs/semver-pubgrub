@@ -23,12 +23,8 @@ fn intersection(
     let inter: SemverPubgrub = pver2.intersection(&pver);
     let mat = req.matches(&ver) && req2.matches(&ver);
     prop_assert_eq!(mat, inter.contains(&ver));
-
-    let bounding_range = pver.bounding_range();
-    if bounding_range.is_some_and(|b| !b.contains(&ver)) {
-        prop_assert!(!mat);
-    }
     if mat {
+        let bounding_range = pver.bounding_range();
         prop_assert!(bounding_range.unwrap().contains(&ver));
     }
     Ok(())
