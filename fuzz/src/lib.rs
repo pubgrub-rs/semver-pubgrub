@@ -1,81 +1,91 @@
-use proptest::{strategy::{Strategy, Just}, arbitrary::any, prop_oneof};
+use arbitrary::Arbitrary;
 
-pub fn prerelease_strategy() -> impl Strategy<Value = semver::Prerelease> {
-    proptest::collection::vec(r"(?-u:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)", 0..=4)
-        .prop_map(|s| s.join(".").parse().unwrap())
+#[derive(Arbitrary)]
+enum ArbitraryOp {
+    Caret,
+    Tilde,
+    Greater,
+    GreaterEq,
+    Less,
+    LessEq,
+    Exact,
+    Wildcard,
 }
 
-pub fn prerelease_build() -> impl Strategy<Value = semver::BuildMetadata> {
-    proptest::collection::vec(r"[0-9a-zA-Z-]+", 0..=2).prop_map(|s| s.join(".").parse().unwrap())
+#[derive(Arbitrary)]
+pub struct ArbitraryComparator {
+    op: ArbitraryOp,
+    major: u64,
+    minor: Option<u64>,
+    patch: Option<u64>,
+    pre: Option<u8>,
 }
 
-pub fn version_strategy() -> impl Strategy<Value = semver::Version> {
-    // r"(?-u:(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?)"
-
-    (any::<[u64; 3]>(), prerelease_strategy(), prerelease_build()).prop_map(|(ver, pre, build)| {
-        semver::Version {
-            major: ver[0],
-            minor: ver[1],
-            patch: ver[2],
+impl ArbitraryComparator {
+    pub fn to_comparator(&self) -> semver::Comparator {
+        let op = match self.op {
+            ArbitraryOp::Caret => semver::Op::Caret,
+            ArbitraryOp::Tilde => semver::Op::Tilde,
+            ArbitraryOp::Greater => semver::Op::Greater,
+            ArbitraryOp::GreaterEq => semver::Op::GreaterEq,
+            ArbitraryOp::Less => semver::Op::Less,
+            ArbitraryOp::LessEq => semver::Op::LessEq,
+            ArbitraryOp::Exact => semver::Op::Exact,
+            ArbitraryOp::Wildcard => semver::Op::Wildcard,
+        };
+        let patch = self.minor.and(self.patch);
+        let pre = patch
+            .and(self.pre)
+            .map(|p| p.to_string())
+            .map(|p| semver::Prerelease::new(&p).unwrap())
+            .unwrap_or_default();
+        semver::Comparator {
+            op,
+            major: self.major,
+            minor: self.minor,
+            patch,
             pre,
-            build: build.parse().unwrap(),
         }
-    })
+    }
 }
 
-pub fn op_strategy() -> impl Strategy<Value = semver::Op> {
-    prop_oneof![
-        Just(semver::Op::Caret),
-        Just(semver::Op::Tilde),
-        Just(semver::Op::Greater),
-        Just(semver::Op::GreaterEq),
-        Just(semver::Op::Less),
-        Just(semver::Op::LessEq),
-        Just(semver::Op::Exact),
-    ]
+impl std::fmt::Debug for ArbitraryComparator {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_comparator().fmt(f)
+    }
 }
 
-pub fn req_strategy() -> impl Strategy<Value = semver::VersionReq> {
-    proptest::collection::vec(
-        (
-            op_strategy(),
-            prop_oneof![
-                any::<[u64; 1]>().prop_map(|[major]| (
-                    major,
-                    None,
-                    None,
-                    semver::Prerelease::EMPTY
-                )),
-                any::<[u64; 2]>().prop_map(|[major, minor]| (
-                    major,
-                    Some(minor),
-                    None,
-                    semver::Prerelease::EMPTY
-                )),
-                any::<[u64; 3]>().prop_map(|[major, minor, patch]| (
-                    major,
-                    Some(minor),
-                    Some(patch),
-                    semver::Prerelease::EMPTY
-                )),
-                (any::<[u64; 3]>(), prerelease_strategy()).prop_map(
-                    |([major, minor, patch], pre)| (
-                        major,
-                        Some(minor),
-                        Some(patch),
-                        semver::Prerelease::new(&pre).unwrap()
-                    )
-                ),
-            ],
-        )
-            .prop_map(|(op, ver)| semver::Comparator {
-                op,
-                major: ver.0,
-                minor: ver.1,
-                patch: ver.2,
-                pre: ver.3,
-            }),
-        1..=3,
-    )
-    .prop_map(|v| v.into_iter().collect::<semver::VersionReq>())
+#[derive(Arbitrary)]
+pub struct ArbitraryVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+    pre: Option<u8>,
+    build: Option<u8>,
+}
+
+impl ArbitraryVersion {
+    pub fn to_version(&self) -> semver::Version {
+        semver::Version {
+            major: self.major,
+            minor: self.minor,
+            patch: self.patch,
+            pre: self
+                .pre
+                .map(|p| p.to_string())
+                .map(|p| semver::Prerelease::new(&p).unwrap())
+                .unwrap_or_default(),
+            build: self
+                .build
+                .map(|p| p.to_string())
+                .map(|p| semver::BuildMetadata::new(&p).unwrap())
+                .unwrap_or_default(),
+        }
+    }
+}
+
+impl std::fmt::Debug for ArbitraryVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.to_version().fmt(f)
+    }
 }
