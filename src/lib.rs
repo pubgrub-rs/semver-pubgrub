@@ -7,6 +7,13 @@ use std::{
 use pubgrub::{range::Range, version_set::VersionSet};
 use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
+mod bump_helpers;
+mod semver_compatibility;
+
+pub use semver_compatibility::SemverCompatibility;
+
+use bump_helpers::{between, bump_major, bump_minor, bump_patch, bump_pre};
+
 /// This needs to be bug-for-bug compatible with https://github.com/dtolnay/semver/blob/master/src/eval.rs
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -23,36 +30,80 @@ impl SemverPubgrub {
     /// Returns None if the range is empty.
     pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
         use Bound::*;
-        match (self.normal.bounding_range(), self.pre.bounding_range()) {
-            (None, None) => None,
-            (None, Some(s)) | (Some(s), None) => Some(s),
-            (Some((ns, ne)), Some((ps, pe))) => {
-                let start = match (ns, ps) {
-                    (Included(n), Included(p)) => Included(min(n, p)),
-                    (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
-                        if e < i {
-                            Excluded(e)
-                        } else {
-                            Included(i)
-                        }
-                    }
-                    (Excluded(n), Excluded(p)) => Excluded(min(n, p)),
-                    (Unbounded, _) | (_, Unbounded) => Unbounded,
-                };
-                let end = match (ne, pe) {
-                    (Included(n), Included(p)) => Included(max(n, p)),
-                    (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
-                        if i < e {
-                            Excluded(e)
-                        } else {
-                            Included(i)
-                        }
-                    }
-                    (Excluded(n), Excluded(p)) => Excluded(max(n, p)),
-                    (Unbounded, _) | (_, Unbounded) => Unbounded,
-                };
-                Some((start, end))
+        let Some((ns, ne)) = self.normal.bounding_range() else {
+            return self.pre.bounding_range();
+        };
+        let Some((ps, pe)) = self.pre.bounding_range() else {
+            return Some((ns, ne));
+        };
+        let start = match (ns, ps) {
+            (Included(n), Included(p)) => Included(min(n, p)),
+            (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
+                if e < i {
+                    Excluded(e)
+                } else {
+                    Included(i)
+                }
             }
+            (Excluded(n), Excluded(p)) => Excluded(min(n, p)),
+            (Unbounded, _) | (_, Unbounded) => Unbounded,
+        };
+        let end = match (ne, pe) {
+            (Included(n), Included(p)) => Included(max(n, p)),
+            (Included(i), Excluded(e)) | (Excluded(e), Included(i)) => {
+                if i < e {
+                    Excluded(e)
+                } else {
+                    Included(i)
+                }
+            }
+            (Excluded(n), Excluded(p)) => Excluded(max(n, p)),
+            (Unbounded, _) | (_, Unbounded) => Unbounded,
+        };
+        Some((start, end))
+    }
+
+    /// Whether cargo would allow more than one package that matches this range.
+    ///
+    /// While this crate matches the semantics of `semver`
+    /// and implements the traits from `pubgrub`, there is an important difference in semantics.
+    /// `pubgrub` assumes that only one version of each package can be selected.
+    /// Whereas cargo allows one version per compatibility range to be selected.
+    /// In general to lower cargo semantics to `pubgrub`
+    /// you need to add synthetic packages to allow this multiplicity.
+    /// (Currently look at the `pubgrub` guide for how to do this.
+    /// Eventually there will be a crate for this.)
+    /// But that's only "in general", in specific most requirements used in the rust ecosystem
+    /// can skip these synthetic packages because they
+    /// can only match one compatibility range anyway.
+    /// This function returns if self can match versions in more than one compatibility range.
+    pub fn more_then_one_compatibility_range(&self) -> bool {
+        use Bound::*;
+        let Some((start, end)) = self.bounding_range() else {
+            // the empty set cannot match more than one thing.
+            return false;
+        };
+        let compat: SemverCompatibility = match start {
+            Included(s) | Excluded(s) => s.into(),
+            Unbounded => {
+                let next = Version::new(0, 0, 1);
+                return match end {
+                    Included(e) => e >= &next,
+                    Excluded(e) => e > &next,
+                    Unbounded => true,
+                };
+            }
+        };
+        let max = compat.maximum();
+        if end == max.as_ref() {
+            return false;
+        }
+        match (end, max.as_ref()) {
+            (e, m) if e == m => false,
+            (_, Included(_)) => unreachable!("bump only returns Excluded or Unbounded"),
+            (_, Unbounded) => false,
+            (Unbounded, _) => true,
+            (Included(e) | Excluded(e), Excluded(m)) => e > m,
         }
     }
 }
@@ -132,72 +183,6 @@ impl From<&VersionReq> for SemverPubgrub {
         out.pre = pre.intersection(&out.pre);
         out
     }
-}
-
-fn bump_major(v: &Version) -> Bound<Version> {
-    match v.major.checked_add(1) {
-        Some(new) => Bound::Excluded({
-            Version {
-                major: new,
-                minor: 0,
-                patch: 0,
-                pre: Prerelease::new("0").unwrap(),
-                build: BuildMetadata::EMPTY,
-            }
-        }),
-        None => Bound::Unbounded,
-    }
-}
-
-fn bump_minor(v: &Version) -> Bound<Version> {
-    match v.minor.checked_add(1) {
-        Some(new) => Bound::Excluded({
-            Version {
-                major: v.major,
-                minor: new,
-                patch: 0,
-                pre: Prerelease::new("0").unwrap(),
-                build: BuildMetadata::EMPTY,
-            }
-        }),
-        None => bump_major(v),
-    }
-}
-
-fn bump_patch(v: &Version) -> Bound<Version> {
-    match v.patch.checked_add(1) {
-        Some(new) => Bound::Excluded({
-            Version {
-                major: v.major,
-                minor: v.minor,
-                patch: new,
-                pre: Prerelease::new("0").unwrap(),
-                build: BuildMetadata::EMPTY,
-            }
-        }),
-        None => bump_minor(v),
-    }
-}
-
-fn bump_pre(v: &Version) -> Bound<Version> {
-    if !v.pre.is_empty() {
-        Bound::Excluded({
-            Version {
-                major: v.major,
-                minor: v.minor,
-                patch: v.patch,
-                pre: Prerelease::new(&format!("{}.0", v.pre)).unwrap(),
-                build: BuildMetadata::EMPTY,
-            }
-        })
-    } else {
-        bump_patch(v)
-    }
-}
-
-fn between(low: Version, into: impl Fn(&Version) -> Bound<Version>) -> Range<Version> {
-    let hight = into(&low);
-    Range::from_range_bounds((Bound::Included(low), hight))
 }
 
 fn matches_impl(cmp: &Comparator) -> SemverPubgrub {

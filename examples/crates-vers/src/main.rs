@@ -6,7 +6,7 @@ use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressS
 use pubgrub::version_set::VersionSet;
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
-use semver_pubgrub::SemverPubgrub;
+use semver_pubgrub::{SemverCompatibility, SemverPubgrub};
 use std::io::Write;
 
 fn get_files_from_index() {
@@ -122,6 +122,19 @@ fn main() {
                         assert!(bounding_range.unwrap().contains(&ver));
                     }
                     bitset.add(id.try_into().unwrap());
+                }
+            }
+            if !bitset.is_empty() && !pver.more_then_one_compatibility_range() {
+                let s = &versions[(&bitset).iter().min().unwrap() as usize];
+                let s_com: SemverCompatibility = s.into();
+                let e = &versions[(&bitset).iter().max().unwrap() as usize];
+                let e_com: SemverCompatibility = e.into();
+                if s_com != e_com {
+                    eprintln!("req: {}", req);
+                    eprintln!("s: {}", s);
+                    eprintln!("e: {}", e);
+                    dbg!(&pver);
+                    assert_eq!(s_com, e_com);
                 }
             }
             (req, pver, bitset)
