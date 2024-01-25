@@ -106,6 +106,30 @@ impl SemverPubgrub {
             (Included(e) | Excluded(e), Excluded(m)) => e > m,
         }
     }
+
+    /// Returns true if the this Range contains the specified values.
+    ///
+    /// The `versions` iterator must be sorted.
+    /// Functionally equivalent to `versions.map(|v| self.contains(v))`.
+    /// Except it runs in `O(size_of_range + len_of_versions)` not `O(size_of_range * len_of_versions)`
+    pub fn contains_many<'s, I>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
+    where
+        I: Iterator<Item = &'s Version> + Clone + 's,
+    {
+        let mut n_iter = self
+            .normal
+            .contains_many(versions.clone().filter(|v| v.pre.is_empty()));
+        let mut p_iter = self
+            .pre
+            .contains_many(versions.clone().filter(|v| !v.pre.is_empty()));
+        versions.filter_map(move |v| {
+            if v.pre.is_empty() {
+                n_iter.next()
+            } else {
+                p_iter.next()
+            }
+        })
+    }
 }
 
 impl Display for SemverPubgrub {

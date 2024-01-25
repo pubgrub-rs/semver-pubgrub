@@ -57,11 +57,12 @@ fn get_files_from_index() {
 }
 
 fn read_files() -> Option<(Vec<Version>, Vec<(VersionReq, SemverPubgrub)>)> {
-    let versions = std::fs::read_to_string("./data/versions.csv")
+    let mut versions: Vec<Version> = std::fs::read_to_string("./data/versions.csv")
         .ok()?
         .lines()
         .map(|ver| ver.parse().unwrap())
         .collect();
+    versions.sort();
     let requirements = std::fs::read_to_string("./data/requirements.csv")
         .ok()?
         .lines()
@@ -83,6 +84,7 @@ fn main() {
     }
 
     let intersection = arg.is_empty() || arg.contains(&"intersection".to_string());
+    let contains = arg.is_empty() || arg.contains(&"contains".to_string());
 
     let Some((versions, requirements)) = read_files() else {
         panic!("no files");
@@ -99,15 +101,24 @@ fn main() {
         .map(|(req, pver)| {
             let neg = pver.complement();
             let mut bitset = BitSet::new();
-            for (id, ver) in versions.iter().enumerate() {
+            for (((id, ver), pver_mat), neg_mat) in versions
+                .iter()
+                .enumerate()
+                .zip(pver.contains_many(versions.iter()))
+                .zip(neg.contains_many(versions.iter()))
+            {
                 let mat = req.matches(ver);
-                if mat != pver.contains(ver) {
+                if contains {
+                    assert_eq!(pver.contains(ver), pver_mat);
+                    assert_eq!(neg.contains(ver), neg_mat);
+                }
+                if mat != pver_mat {
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&pver);
                     assert_eq!(req.matches(ver), pver.contains(ver));
                 }
-                if !mat != neg.contains(ver) {
+                if !mat != neg_mat {
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&neg);
@@ -135,7 +146,7 @@ fn main() {
                 assert!(bounding_range.contains(s));
                 assert!(bounding_range.contains(e));
             }
-            (req, pver, bitset)
+            (pver, bitset)
         })
         .collect();
 
@@ -149,8 +160,8 @@ fn main() {
             .par_iter()
             .progress_with(style)
             .enumerate()
-            .for_each(|(i, (_, pver, bs))| {
-                for (_, pver2, bs2) in &requirements[(i + 1)..] {
+            .for_each(|(i, (pver, bs))| {
+                for (pver2, bs2) in &requirements[(i + 1)..] {
                     let inter: SemverPubgrub = pver2.intersection(&pver);
                     assert_eq!(inter, pver.intersection(&pver2));
                     let bs_inter: BitSet = (bs & bs2).into_iter().collect();
@@ -162,23 +173,25 @@ fn main() {
                     } else if &inter == pver2 {
                         assert_eq!(&bs_inter, bs2);
                     } else {
-                        let min_mat = (&bs_inter).iter().next();
-                        let max_mat = (&bs_inter).iter().last();
+                        let min_mat = (&bs_inter).iter().next().map(|x| x as usize);
+                        let max_mat = (&bs_inter).iter().last().map(|x| x as usize);
 
                         let bounding_range = inter.bounding_range().expect("inter is not empty");
                         if let (Some(s), Some(e)) = (min_mat, max_mat) {
                             assert!(s <= e);
-                            assert!(bounding_range.contains(&versions[s as usize]));
-                            assert!(bounding_range.contains(&versions[e as usize]));
+                            assert!(bounding_range.contains(&versions[s]));
+                            assert!(bounding_range.contains(&versions[e]));
                         }
                         let start = min_mat.unwrap_or(0).saturating_sub(30);
-                        let end = min(
-                            max_mat.unwrap_or(!0).saturating_add(30),
-                            versions.len() as u32 - 1,
-                        );
-                        for id in start..=end {
+                        let end = min(max_mat.unwrap_or(!0).saturating_add(30), versions.len() - 1);
+                        for (id, inter_mat) in
+                            (start..=end).zip(inter.contains_many(versions[start..=end].iter()))
+                        {
                             let ver = &versions[id as usize];
-                            let mat = bs_inter.contains(id);
+                            let mat = bs_inter.contains(id as u32);
+                            if contains {
+                                assert_eq!(inter.contains(ver), inter_mat);
+                            }
                             assert_eq!(mat, inter.contains(ver));
                         }
                     }
