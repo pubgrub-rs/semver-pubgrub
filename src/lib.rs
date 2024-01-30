@@ -143,6 +143,16 @@ impl Display for SemverPubgrub {
     }
 }
 
+impl From<&SemverCompatibility> for SemverPubgrub {
+    fn from(compat: &SemverCompatibility) -> Self {
+        let r = Range::from(compat);
+        Self {
+            normal: r.clone(),
+            pre: r,
+        }
+    }
+}
+
 impl VersionSet for SemverPubgrub {
     type V = Version;
 
