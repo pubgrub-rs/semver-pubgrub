@@ -16,6 +16,7 @@ use bump_helpers::{between, bump_major, bump_minor, bump_patch, bump_pre};
 
 /// This needs to be bug-for-bug compatible with https://github.com/dtolnay/semver/blob/master/src/eval.rs
 
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SemverPubgrub {
     normal: Range<Version>,
