@@ -131,10 +131,10 @@ fn main() {
             if !bitset.is_empty() {
                 let s = &versions[(&bitset).iter().next().unwrap() as usize];
                 let e = &versions[(&bitset).iter().last().unwrap() as usize];
-                if !pver.more_then_one_compatibility_range() {
+                if let Some(com) = pver.only_one_compatibility_range() {
                     let s_com: SemverCompatibility = s.into();
                     let e_com: SemverCompatibility = e.into();
-                    if s_com != e_com {
+                    if s_com != com || e_com != com {
                         eprintln!("req: {}", req);
                         eprintln!("s: {}", s);
                         eprintln!("e: {}", e);

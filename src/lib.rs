@@ -64,7 +64,7 @@ impl SemverPubgrub {
         Some((start, end))
     }
 
-    /// Whether cargo would allow more than one package that matches this range.
+    /// Whether cargo would require that only one package matche this range.
     ///
     /// While this crate matches the semantics of `semver`
     /// and implements the traits from `pubgrub`, there is an important difference in semantics.
@@ -77,34 +77,31 @@ impl SemverPubgrub {
     /// But that's only "in general", in specific most requirements used in the rust ecosystem
     /// can skip these synthetic packages because they
     /// can only match one compatibility range anyway.
-    /// This function returns if self can match versions in more than one compatibility range.
-    pub fn more_then_one_compatibility_range(&self) -> bool {
+    /// This function returns the compatibility range if self can only one.
+    pub fn only_one_compatibility_range(&self) -> Option<SemverCompatibility> {
         use Bound::*;
         let Some((start, end)) = self.bounding_range() else {
-            // the empty set cannot match more than one thing.
-            return false;
+            // the empty set cannot match anything, so we can pick any compatibility range.
+            return Some(SemverCompatibility::Patch(0));
         };
         let compat: SemverCompatibility = match start {
             Included(s) | Excluded(s) => s.into(),
             Unbounded => {
                 let next = Version::new(0, 0, 1);
                 return match end {
-                    Included(e) => e >= &next,
-                    Excluded(e) => e > &next,
-                    Unbounded => true,
+                    Included(e) => (e < &next).then_some(e.into()),
+                    Excluded(e) => (e <= &next).then_some(e.into()),
+                    Unbounded => None,
                 };
             }
         };
         let max = compat.maximum();
-        if end == max.as_ref() {
-            return false;
-        }
         match (end, max.as_ref()) {
-            (e, m) if e == m => false,
+            (e, m) if e == m => Some(compat),
             (_, Included(_)) => unreachable!("bump only returns Excluded or Unbounded"),
-            (_, Unbounded) => false,
-            (Unbounded, _) => true,
-            (Included(e) | Excluded(e), Excluded(m)) => e > m,
+            (_, Unbounded) => Some(compat),
+            (Unbounded, _) => None,
+            (Included(e) | Excluded(e), Excluded(m)) => (e <= m).then_some(compat),
         }
     }
 
