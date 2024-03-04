@@ -128,6 +128,28 @@ impl SemverPubgrub {
             }
         })
     }
+
+    /// Returns a simpler Range that contains the same versions
+    ///
+    /// For every one of the Versions provided in versions the existing range and
+    /// the simplified range will agree on whether it is contained.
+    /// The simplified version may include or exclude versions that are not in versions as the implementation wishes.
+    /// For example:
+    ///  - If all the versions are contained in the original than the range will be simplified to `full`.
+    ///  - If none of the versions are contained in the original than the range will be simplified to `empty`.
+    ///
+    /// If versions are not sorted the correctness of this function is not guaranteed.
+    pub fn simplify<'v, I>(&self, versions: I) -> Self
+    where
+        I: Iterator<Item = &'v Version> + Clone + 'v,
+    {
+        Self {
+            normal: self
+                .normal
+                .simplify(versions.clone().filter(|v| v.pre.is_empty())),
+            pre: self.pre.simplify(versions.filter(|v| !v.pre.is_empty())),
+        }
+    }
 }
 
 impl Display for SemverPubgrub {
