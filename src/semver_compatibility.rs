@@ -17,9 +17,9 @@ pub enum SemverCompatibility {
 
 impl SemverCompatibility {
     pub fn minimum(&self) -> Version {
-        match self {
+        match *self {
             SemverCompatibility::Major(new) => Version {
-                major: (*new).into(),
+                major: new.into(),
                 minor: 0,
                 patch: 0,
                 pre: Prerelease::new("0").unwrap(),
@@ -27,7 +27,7 @@ impl SemverCompatibility {
             },
             SemverCompatibility::Minor(new) => Version {
                 major: 0,
-                minor: (*new).into(),
+                minor: new.into(),
                 patch: 0,
                 pre: Prerelease::new("0").unwrap(),
                 build: BuildMetadata::EMPTY,
@@ -35,8 +35,34 @@ impl SemverCompatibility {
             SemverCompatibility::Patch(new) => Version {
                 major: 0,
                 minor: 0,
-                patch: *new,
+                patch: new,
                 pre: Prerelease::new("0").unwrap(),
+                build: BuildMetadata::EMPTY,
+            },
+        }
+    }
+
+    pub fn canonical(&self) -> Version {
+        match *self {
+            SemverCompatibility::Major(new) => Version {
+                major: new.into(),
+                minor: 0,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            SemverCompatibility::Minor(new) => Version {
+                major: 0,
+                minor: new.into(),
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            SemverCompatibility::Patch(new) => Version {
+                major: 0,
+                minor: 0,
+                patch: new,
+                pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
         }

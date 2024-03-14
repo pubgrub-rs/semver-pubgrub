@@ -449,7 +449,6 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use pubgrub::version_set::VersionSet;
     use std::ops::RangeBounds;
 
     const OPS: &[&str] = &["^", "~", "=", "<", ">", "<=", ">="];
