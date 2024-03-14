@@ -228,6 +228,21 @@ impl VersionSet for SemverPubgrub {
             self.pre.contains(v)
         }
     }
+
+    fn union(&self, other: &Self) -> Self {
+        SemverPubgrub {
+            normal: self.normal.union(&other.normal),
+            pre: self.pre.union(&other.pre),
+        }
+    }
+
+    fn is_disjoint(&self, other: &Self) -> bool {
+        self.normal.is_disjoint(&other.normal) && self.pre.is_disjoint(&other.pre)
+    }
+
+    fn subset_of(&self, other: &Self) -> bool {
+        self.normal.subset_of(&other.normal) && self.pre.subset_of(&other.pre)
+    }
 }
 
 impl From<&VersionReq> for SemverPubgrub {
