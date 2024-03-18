@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     cmp::{max, min},
     fmt::Display,
     ops::Bound,
@@ -118,18 +119,19 @@ impl SemverPubgrub {
     /// The `versions` iterator must be sorted.
     /// Functionally equivalent to `versions.map(|v| self.contains(v))`.
     /// Except it runs in `O(size_of_range + len_of_versions)` not `O(size_of_range * len_of_versions)`
-    pub fn contains_many<'s, I>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
+    pub fn contains_many<'s, I, BV>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
     where
-        I: Iterator<Item = &'s Version> + Clone + 's,
+        I: Iterator<Item = BV> + Clone + 's,
+        BV: Borrow<Version> + 's,
     {
         let mut n_iter = self
             .normal
-            .contains_many(versions.clone().filter(|v| v.pre.is_empty()));
+            .contains_many(versions.clone().filter(|v| v.borrow().pre.is_empty()));
         let mut p_iter = self
             .pre
-            .contains_many(versions.clone().filter(|v| !v.pre.is_empty()));
+            .contains_many(versions.clone().filter(|v| !v.borrow().pre.is_empty()));
         versions.filter_map(move |v| {
-            if v.pre.is_empty() {
+            if v.borrow().pre.is_empty() {
                 n_iter.next()
             } else {
                 p_iter.next()
@@ -147,15 +149,18 @@ impl SemverPubgrub {
     ///  - If none of the versions are contained in the original than the range will be simplified to `empty`.
     ///
     /// If versions are not sorted the correctness of this function is not guaranteed.
-    pub fn simplify<'v, I>(&self, versions: I) -> Self
+    pub fn simplify<'v, I, BV>(&self, versions: I) -> Self
     where
-        I: Iterator<Item = &'v Version> + Clone + 'v,
+        I: Iterator<Item = BV> + Clone + 'v,
+        BV: Borrow<Version> + 'v,
     {
         Self {
             normal: self
                 .normal
-                .simplify(versions.clone().filter(|v| v.pre.is_empty())),
-            pre: self.pre.simplify(versions.filter(|v| !v.pre.is_empty())),
+                .simplify(versions.clone().filter(|v| v.borrow().pre.is_empty())),
+            pre: self
+                .pre
+                .simplify(versions.filter(|v| !v.borrow().pre.is_empty())),
         }
     }
 }
