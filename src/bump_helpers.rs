@@ -67,10 +67,38 @@ pub(crate) fn bump_pre(v: &Version) -> Bound<Version> {
     }
 }
 
-pub(crate) fn between(
-    low: Version,
-    into: impl Fn(&Version) -> Bound<Version>,
-) -> Range<Version> {
+pub(crate) fn between(low: Version, into: impl Fn(&Version) -> Bound<Version>) -> Range<Version> {
     let hight = into(&low);
     Range::from_range_bounds((Bound::Included(low), hight))
+}
+
+fn bump_up_to_normal(v: &Version) -> Option<Version> {
+    if v.pre.is_empty() {
+        return None;
+    } else {
+        Some(Version {
+            major: v.major,
+            minor: v.minor,
+            patch: v.patch,
+            pre: Prerelease::EMPTY,
+            build: BuildMetadata::EMPTY,
+        })
+    }
+}
+
+pub(crate) fn simplified_bounds_to_normal(
+    bounds: (Bound<Version>, Bound<Version>),
+) -> (Bound<Version>, Bound<Version>) {
+    let (mut from, mut to) = bounds;
+    if let Bound::Included(f) | Bound::Excluded(f) = &from {
+        if let Some(n) = bump_up_to_normal(f) {
+            from = Bound::Included(n)
+        }
+    };
+    if let Bound::Included(f) | Bound::Excluded(f) = &to {
+        if let Some(n) = bump_up_to_normal(f) {
+            to = Bound::Excluded(n)
+        }
+    };
+    (from, to)
 }

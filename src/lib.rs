@@ -15,6 +15,8 @@ pub use semver_compatibility::SemverCompatibility;
 
 use bump_helpers::{between, bump_major, bump_minor, bump_patch, bump_pre};
 
+use crate::bump_helpers::simplified_bounds_to_normal;
+
 #[cfg(feature = "serde")]
 fn range_is_empty(r: &Range<Version>) -> bool {
     r == &Range::empty()
@@ -305,7 +307,7 @@ fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
     };
 
     SemverPubgrub {
-        normal,
+        normal: simplified_to_normal(&normal),
         pre: Range::empty(),
     }
 }
@@ -333,7 +335,7 @@ fn matches_greater(cmp: &Comparator) -> SemverPubgrub {
     };
     let out = Range::from_range_bounds((low_bound, Bound::Unbounded));
     SemverPubgrub {
-        normal: out.clone(),
+        normal: simplified_to_normal(&out),
         pre: out,
     }
 }
@@ -352,7 +354,7 @@ fn matches_less(cmp: &Comparator) -> SemverPubgrub {
         build: BuildMetadata::EMPTY,
     });
     SemverPubgrub {
-        normal: out.clone(),
+        normal: simplified_to_normal(&out),
         pre: out,
     }
 }
@@ -369,7 +371,7 @@ fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
     if cmp.patch.is_some() {
         let out = between(low, bump_minor);
         return SemverPubgrub {
-            normal: out.clone(),
+            normal: simplified_to_normal(&out),
             pre: out,
         };
     }
@@ -379,7 +381,7 @@ fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
         between(low, bump_major)
     };
     SemverPubgrub {
-        normal,
+        normal: simplified_to_normal(&normal),
         pre: Range::empty(),
     }
 }
@@ -400,7 +402,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     let Some(minor) = cmp.minor else {
         let out = between(low, bump_major);
         return SemverPubgrub {
-            normal: out.clone(),
+            normal: simplified_to_normal(&out),
             pre: out,
         };
     };
@@ -412,7 +414,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
             between(low, bump_minor)
         };
         return SemverPubgrub {
-            normal: out.clone(),
+            normal: simplified_to_normal(&out),
             pre: out,
         };
     };
@@ -425,7 +427,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
         between(low, bump_patch)
     };
     SemverPubgrub {
-        normal: out.clone(),
+        normal: simplified_to_normal(&out),
         pre: out,
     }
 }
@@ -449,6 +451,15 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
         },
         Version::new(cmp.major, minor, patch),
     )
+}
+
+fn simplified_to_normal(input: &Range<Version>) -> Range<Version> {
+    input
+        .iter()
+        .map(|(from, to)| simplified_bounds_to_normal((from.clone(), to.clone())))
+        .map(|bounds| Range::from_range_bounds(bounds))
+        .reduce(|a, b| a.union(&b))
+        .unwrap_or_else(Range::empty)
 }
 
 #[cfg(test)]
