@@ -165,6 +165,16 @@ impl SemverPubgrub {
                 .simplify(versions.filter(|v| !v.borrow().pre.is_empty())),
         }
     }
+
+    /// Iterate over the parts of the range that can match normal releases.
+    pub fn iter_normal(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+        self.normal.iter()
+    }
+
+    /// Iterate over the parts of the range that can match pre-releases.
+    pub fn iter_pre(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+        self.pre.iter()
+    }
 }
 
 impl Display for SemverPubgrub {
