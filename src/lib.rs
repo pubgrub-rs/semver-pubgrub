@@ -91,29 +91,47 @@ impl SemverPubgrub {
     /// This function returns the compatibility range if self can only one.
     pub fn only_one_compatibility_range(&self) -> Option<SemverCompatibility> {
         use Bound::*;
-        let Some((start, end)) = self.bounding_range() else {
-            // the empty set cannot match anything, so we can pick any compatibility range.
+        let normal_bound = self.normal.bounding_range();
+        let pre_bound = self.pre.bounding_range();
+        if normal_bound.is_none() && pre_bound.is_none() {
             return Some(SemverCompatibility::Patch(0));
-        };
-        let compat: SemverCompatibility = match start {
-            Included(s) | Excluded(s) => s.into(),
-            Unbounded => {
-                let next = Version::new(0, 0, 1);
-                return match end {
-                    Included(e) => (e < &next).then_some(e.into()),
-                    Excluded(e) => (e <= &next).then_some(e.into()),
-                    Unbounded => None,
-                };
-            }
-        };
-        let max = compat.maximum();
-        match (end, max.as_ref()) {
-            (e, m) if e == m => Some(compat),
-            (_, Included(_)) => unreachable!("bump only returns Excluded or Unbounded"),
-            (_, Unbounded) => Some(compat),
-            (Unbounded, _) => None,
-            (Included(e) | Excluded(e), Excluded(m)) => (e <= m).then_some(compat),
         }
+        let normal_start = normal_bound.map(|(s, _)| match s {
+            Included(v) | Excluded(v) => v.into(),
+            Unbounded => SemverCompatibility::Patch(0),
+        });
+        let pre_start = pre_bound.map(|(s, _)| match s {
+            Included(v) | Excluded(v) => v.into(),
+            Unbounded => SemverCompatibility::Patch(0),
+        });
+        if normal_start.is_some() && pre_start.is_some() && normal_start != pre_start {
+            return None;
+        }
+        let start = normal_start.or(pre_start).unwrap();
+        if let Some(next) = start.next() {
+            if let Some((_, pe)) = pre_bound {
+                match (pe, next.minimum()) {
+                    (Unbounded, _) => return None,
+                    (Included(e) | Excluded(e), m) => {
+                        if e >= &m {
+                            return None;
+                        }
+                    }
+                }
+            }
+            if let Some((_, ne)) = normal_bound {
+                match (ne, next.canonical()) {
+                    (Unbounded, _) => return None,
+                    (Included(e) | Excluded(e), m) => {
+                        if e >= &m {
+                            return None;
+                        }
+                    }
+                }
+            }
+        }
+
+        Some(start)
     }
 
     /// Returns true if the this Range contains the specified values.

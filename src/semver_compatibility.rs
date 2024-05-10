@@ -16,23 +16,24 @@ pub enum SemverCompatibility {
 }
 
 impl SemverCompatibility {
+    /// The smallest version that is in this compatibility range.
     pub fn minimum(&self) -> Version {
         match *self {
-            SemverCompatibility::Major(new) => Version {
+            Self::Major(new) => Version {
                 major: new.into(),
                 minor: 0,
                 patch: 0,
                 pre: Prerelease::new("0").unwrap(),
                 build: BuildMetadata::EMPTY,
             },
-            SemverCompatibility::Minor(new) => Version {
+            Self::Minor(new) => Version {
                 major: 0,
                 minor: new.into(),
                 patch: 0,
                 pre: Prerelease::new("0").unwrap(),
                 build: BuildMetadata::EMPTY,
             },
-            SemverCompatibility::Patch(new) => Version {
+            Self::Patch(new) => Version {
                 major: 0,
                 minor: 0,
                 patch: new,
@@ -42,23 +43,24 @@ impl SemverCompatibility {
         }
     }
 
+    /// The smallest non pre-release version that is in this compatibility range.
     pub fn canonical(&self) -> Version {
         match *self {
-            SemverCompatibility::Major(new) => Version {
+            Self::Major(new) => Version {
                 major: new.into(),
                 minor: 0,
                 patch: 0,
                 pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
-            SemverCompatibility::Minor(new) => Version {
+            Self::Minor(new) => Version {
                 major: 0,
                 minor: new.into(),
                 patch: 0,
                 pre: Prerelease::EMPTY,
                 build: BuildMetadata::EMPTY,
             },
-            SemverCompatibility::Patch(new) => Version {
+            Self::Patch(new) => Version {
                 major: 0,
                 minor: 0,
                 patch: new,
@@ -68,12 +70,28 @@ impl SemverCompatibility {
         }
     }
 
-    pub fn maximum(&self) -> Bound<Version> {
-        let min = self.minimum();
-        match self {
-            SemverCompatibility::Major(_) => bump_major(&min),
-            SemverCompatibility::Minor(_) => bump_minor(&min),
-            SemverCompatibility::Patch(_) => bump_patch(&min),
+    pub fn next(&self) -> Option<SemverCompatibility> {
+        let one = NonZeroU64::new(1).unwrap();
+        match *self {
+            Self::Patch(s) => Some(
+                s.checked_add(1)
+                    .map(Self::Patch)
+                    .unwrap_or_else(|| Self::Minor(one)),
+            ),
+            Self::Minor(s) => Some(
+                s.checked_add(1)
+                    .map(Self::Minor)
+                    .unwrap_or_else(|| Self::Major(one)),
+            ),
+            Self::Major(s) => s.checked_add(1).map(Self::Major),
+        }
+    }
+
+    pub fn maximum_bound(&self) -> Bound<Version> {
+        if let Some(next) = self.next() {
+            Bound::Excluded(next.minimum())
+        } else {
+            Bound::Unbounded
         }
     }
 }
