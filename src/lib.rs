@@ -112,8 +112,9 @@ impl SemverPubgrub {
             if let Some((_, pe)) = pre_bound {
                 match (pe, next.minimum()) {
                     (Unbounded, _) => return None,
-                    (Included(e) | Excluded(e), m) => {
-                        if e >= &m {
+                    (Included(_), _) => unreachable!("We do not generate included ending bounds."),
+                    (Excluded(e), m) => {
+                        if e > &m {
                             return None;
                         }
                     }
@@ -122,8 +123,9 @@ impl SemverPubgrub {
             if let Some((_, ne)) = normal_bound {
                 match (ne, next.canonical()) {
                     (Unbounded, _) => return None,
-                    (Included(e) | Excluded(e), m) => {
-                        if e >= &m {
+                    (Included(_), _) => unreachable!("We do not generate included ending bounds."),
+                    (Excluded(e), m) => {
+                        if e > &m {
                             return None;
                         }
                     }
@@ -493,7 +495,7 @@ fn simplified_to_normal(input: &Range<Version>) -> Range<Version> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::ops::RangeBounds;
+    use std::{collections::HashSet, ops::RangeBounds};
 
     const OPS: &[&str] = &["^", "~", "=", "<", ">", "<=", ">="];
 
@@ -574,6 +576,59 @@ mod test {
                         assert!(bounding_range.unwrap().contains(&ver));
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn test_only_one_compatibility_range() {
+        for op in OPS {
+            for psot in [
+                "0.0.0-r",
+                "0.0.0",
+                "0.0.1-r",
+                "0.0.1",
+                "0.1.0-r",
+                "0.1.0",
+                "1.0.0-r",
+                "1.0.0",
+                "0.0.0, <=0.0.1",
+                "0.0.0-r, <=0.0.1-0",
+                "0.0.1, <=0.0.2",
+                "0.0.1-r, <=0.0.2-0",
+                "0.1.0, <=0.2.0",
+                "0.1.0-r, <=0.2.0-0",
+                "1.0.0, <=2.0.0",
+                "1.0.0-r, <=2.0.0-0",
+            ] {
+                let raw_req = format!("{op}{psot}");
+                let req = semver::VersionReq::parse(&raw_req).unwrap();
+                let pver: SemverPubgrub = (&req).into();
+                dbg!(raw_req);
+
+                let set: HashSet<_> = [
+                    "0.0.0-0", "0.0.0-r", "0.0.0", "0.0.1-0", "0.0.1-r", "0.0.1", "0.0.2-0",
+                    "0.0.2-r", "0.0.2", "0.1.0-0", "0.1.0-r", "0.1.0", "0.1.1", "0.2.0-0",
+                    "0.2.0-r", "0.2.0", "1.0.0-0", "1.0.0-r", "1.0.0", "1.1.0", "2.0.0-0",
+                    "2.0.0-r", "2.0.0", "3.0.0",
+                ]
+                .into_iter()
+                .filter_map(|raw_ver| {
+                    let ver = semver::Version::parse(raw_ver).unwrap();
+                    let mat = req.matches(&ver);
+                    if mat != pver.contains(&ver) {
+                        eprintln!("{}", ver);
+                        eprintln!("{}", req);
+                        dbg!(&pver);
+                        assert_eq!(mat, pver.contains(&ver));
+                    }
+                    let cap: SemverCompatibility = (&ver).into();
+                    mat.then_some(cap)
+                })
+                .collect();
+
+                let bounding_range = pver.only_one_compatibility_range();
+                assert_eq!(set.len() <= 1, bounding_range.is_some());
             }
         }
     }
