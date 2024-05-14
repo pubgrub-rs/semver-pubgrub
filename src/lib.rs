@@ -112,7 +112,11 @@ impl SemverPubgrub {
             if let Some((_, pe)) = pre_bound {
                 match (pe, next.minimum()) {
                     (Unbounded, _) => return None,
-                    (Included(_), _) => unreachable!("We do not generate included ending bounds."),
+                    (Included(e), m) => {
+                        if e >= &m {
+                            return None;
+                        }
+                    }
                     (Excluded(e), m) => {
                         if e > &m {
                             return None;
@@ -123,7 +127,11 @@ impl SemverPubgrub {
             if let Some((_, ne)) = normal_bound {
                 match (ne, next.canonical()) {
                     (Unbounded, _) => return None,
-                    (Included(_), _) => unreachable!("We do not generate included ending bounds."),
+                    (Included(e), m) => {
+                        if e >= &m {
+                            return None;
+                        }
+                    }
                     (Excluded(e), m) => {
                         if e > &m {
                             return None;
@@ -184,6 +192,12 @@ impl SemverPubgrub {
                 .pre
                 .simplify(versions.filter(|v| !v.borrow().pre.is_empty())),
         }
+    }
+
+    /// If the range was constructed using Singleton, return the version from the constructor.
+    /// Otherwise, returns [None].
+    pub fn as_singleton(&self) -> Option<&Version> {
+        self.normal.as_singleton().xor(self.pre.as_singleton())
     }
 
     /// Iterate over the parts of the range that can match normal releases.
@@ -629,6 +643,43 @@ mod test {
 
                 let bounding_range = pver.only_one_compatibility_range();
                 assert_eq!(set.len() <= 1, bounding_range.is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn test_only_one_compatibility_range_singletons() {
+        let raw_vers = [
+            "0.0.0-0", "0.0.0-r", "0.0.0", "0.0.1-0", "0.0.1-r", "0.0.1", "0.0.2-0", "0.0.2-r",
+            "0.0.2", "0.1.0-0", "0.1.0-r", "0.1.0", "0.1.1", "0.2.0-0", "0.2.0-r", "0.2.0",
+            "1.0.0-0", "1.0.0-r", "1.0.0", "1.1.0", "2.0.0-0", "2.0.0-r", "2.0.0", "3.0.0",
+        ];
+        let vers = raw_vers.map(|raw_ver| semver::Version::parse(raw_ver).unwrap());
+        let reqs = vers.clone().map(|v| SemverPubgrub::singleton(v.clone()));
+        for pver in &reqs {
+            pver.as_singleton().unwrap();
+            // Singletons can only match one thing so they definitely only match one compatibility range.
+            pver.only_one_compatibility_range().unwrap();
+        }
+
+        let req_unions = reqs
+            .iter()
+            .flat_map(|req1| reqs.iter().map(|req2: &SemverPubgrub| req1.union(req2)));
+
+        for preq in req_unions {
+            let set: HashSet<SemverCompatibility> = vers
+                .iter()
+                .filter(|ver| preq.contains(&ver))
+                .map(|ver| ver.into())
+                .collect();
+            let only_one_comp = preq.only_one_compatibility_range();
+            dbg!(&preq, &set, only_one_comp);
+            assert_eq!(set.len() <= 1, only_one_comp.is_some());
+            if only_one_comp.is_none() {
+                assert!(preq.as_singleton().is_none());
+            }
+            if preq.as_singleton().is_some() {
+                assert_eq!(set.len(), 1);
             }
         }
     }
