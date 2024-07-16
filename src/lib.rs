@@ -24,7 +24,7 @@ fn range_is_empty(r: &Range<Version>) -> bool {
 
 /// This needs to be bug-for-bug compatible with https://github.com/dtolnay/semver/blob/master/src/eval.rs
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct SemverPubgrub {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "range_is_empty"))]
     #[cfg_attr(feature = "serde", serde(default = "Range::empty"))]
