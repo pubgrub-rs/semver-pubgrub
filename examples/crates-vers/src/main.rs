@@ -3,7 +3,7 @@ use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressStyle};
-use pubgrub::version_set::VersionSet;
+use pubgrub::VersionSet as _;
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
 use semver_pubgrub::{SemverCompatibility, SemverPubgrub};

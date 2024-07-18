@@ -3,7 +3,7 @@ use std::ops::RangeBounds;
 
 use libfuzzer_sys::fuzz_target;
 
-use pubgrub::version_set::VersionSet;
+use pubgrub::VersionSet as _;
 use semver::VersionReq;
 use semver_pubgrub::SemverPubgrub;
 use semver_pubgrub_fuzz::{ArbitraryComparator, ArbitraryVersion};

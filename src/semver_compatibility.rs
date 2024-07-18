@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, ops::Bound};
 
-use pubgrub::range::Range;
+use pubgrub::Range;
 use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::bump_helpers::{bump_major, bump_minor, bump_patch};

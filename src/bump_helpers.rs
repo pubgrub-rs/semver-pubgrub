@@ -1,6 +1,6 @@
 use std::ops::Bound;
 
-use pubgrub::range::Range;
+use pubgrub::Range;
 
 use semver::BuildMetadata;
 use semver::Prerelease;

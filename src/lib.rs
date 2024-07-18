@@ -5,7 +5,7 @@ use std::{
     ops::Bound,
 };
 
-use pubgrub::{range::Range, version_set::VersionSet};
+use pubgrub::{Range, VersionSet};
 use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
 mod bump_helpers;
