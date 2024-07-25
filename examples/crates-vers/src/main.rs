@@ -1,4 +1,5 @@
 use std::ops::RangeBounds;
+use std::sync::{Arc, Mutex};
 use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
@@ -79,6 +80,8 @@ fn main() {
     // TODO: Use real argument pursing
     let arg: Vec<_> = std::env::args().skip(1).collect();
 
+    let mutex = Arc::new(Mutex::new(()));
+
     if arg.is_empty() || arg.contains(&"get-from-index".to_string()) {
         get_files_from_index();
     }
@@ -98,7 +101,7 @@ fn main() {
     let requirements: Vec<_> = requirements
         .into_par_iter()
         .progress_with(style)
-        .map(|(req, pver)| {
+        .map_with(mutex.clone(), |mutex, (req, pver)| {
             let neg = pver.complement();
             let mut bitset = BitSet::new();
             for (((id, ver), pver_mat), neg_mat) in versions
@@ -107,22 +110,24 @@ fn main() {
                 .zip(pver.contains_many(versions.iter()))
                 .zip(neg.contains_many(versions.iter()))
             {
-                let mat = req.matches(ver);
+                let mat = req.matches_prerelease(ver);
                 if contains {
                     assert_eq!(pver.contains(ver), pver_mat);
                     assert_eq!(neg.contains(ver), neg_mat);
                 }
                 if mat != pver_mat {
+                    let _lock = mutex.lock();
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&pver);
-                    assert_eq!(req.matches(ver), pver.contains(ver));
+                    assert_eq!(req.matches_prerelease(ver), pver.contains(ver));
                 }
                 if !mat != neg_mat {
+                    let _lock = mutex.lock();
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&neg);
-                    assert_eq!(!req.matches(ver), neg.contains(ver));
+                    assert_eq!(!req.matches_prerelease(ver), neg.contains(ver));
                 }
                 if mat {
                     bitset.add(id.try_into().unwrap());
@@ -135,6 +140,7 @@ fn main() {
                     let s_com: SemverCompatibility = s.into();
                     let e_com: SemverCompatibility = e.into();
                     if s_com != com || e_com != com {
+                        let _lock = mutex.lock();
                         eprintln!("req: {}", req);
                         eprintln!("s: {}", s);
                         eprintln!("e: {}", e);

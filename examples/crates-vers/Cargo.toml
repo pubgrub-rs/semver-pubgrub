@@ -9,7 +9,7 @@ edition = "2021"
 rayon="1"
 indicatif = {version = "0.17.7", features = ["rayon"]}
 crates-index = { version = "2.3", features = ["git", "git-https", "parallel"]}
-semver="1"
+semver = {git = "https://github.com/linyihai/semver.git", branch = "prerelease-match"}
 semver-pubgrub = { path = "../../" }
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
 hibitset = "0.6.4"

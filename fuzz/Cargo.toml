@@ -9,7 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-semver = "1.0.13"
+semver = {git = "https://github.com/linyihai/semver.git", branch = "prerelease-match"}
 arbitrary = { version = "1", features = ["derive"] }
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
 
