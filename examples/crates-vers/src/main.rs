@@ -90,6 +90,9 @@ fn main() {
         panic!("no files");
     };
 
+    assert!(versions.is_sorted());
+    assert!(versions.is_sorted_by_key(|v| SemverCompatibility::from(v)));
+
     let template =  "contains: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
     let style = ProgressBar::new(requirements.len() as u64)
         .with_style(ProgressStyle::with_template(template).unwrap())

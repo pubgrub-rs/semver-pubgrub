@@ -10,9 +10,9 @@ use crate::bump_helpers::{bump_major, bump_minor, bump_patch};
 /// same.
 #[derive(Clone, Copy, Eq, PartialEq, Hash, Debug, PartialOrd, Ord)]
 pub enum SemverCompatibility {
-    Major(NonZeroU64),
-    Minor(NonZeroU64),
     Patch(u64),
+    Minor(NonZeroU64),
+    Major(NonZeroU64),
 }
 
 impl SemverCompatibility {
