@@ -5,7 +5,7 @@ use hibitset::{BitSet, BitSetLike};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressStyle};
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
-use semver_pubgrub::{SemverCompatibility, SemverPubgrub};
+use semver_pubgrub::{SemverCompatibility, SemverPubgrub, SmallVersion, VersionLike};
 use std::io::Write;
 
 fn get_files_from_index() {
@@ -91,6 +91,27 @@ fn main() {
 
     assert!(versions.is_sorted());
     assert!(versions.is_sorted_by_key(|v| SemverCompatibility::from(v)));
+
+    let template =  "versions: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
+    let style = ProgressBar::new(versions.len() as u64)
+        .with_style(ProgressStyle::with_template(template).unwrap())
+        .with_finish(ProgressFinish::AndLeave);
+
+    versions.par_iter().progress_with(style).for_each(|v1| {
+        let s1: SmallVersion = v1.into();
+        assert_eq!(v1.major, s1.major());
+        assert_eq!(v1.minor, s1.minor());
+        assert_eq!(v1.patch, s1.patch());
+        assert_eq!(v1.pre.as_str(), s1.pre());
+        // small version round trips
+        let v: Version = s.into_version();
+        assert_eq!(v1, &v);
+        for v2 in &versions {
+            let s2: SmallVersion = v2.into();
+            assert_eq!(s1.cmp(&s2), v1.cmp(v2));
+            assert_eq!(s1 == s2, v1 == v2);
+        }
+    });
 
     let template =  "contains: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
     let style = ProgressBar::new(requirements.len() as u64)

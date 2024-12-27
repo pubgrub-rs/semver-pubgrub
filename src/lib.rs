@@ -11,13 +11,15 @@ use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 mod bump_helpers;
 mod semver_compatibility;
 mod version_like;
+mod small_version;
 
 pub use semver_compatibility::SemverCompatibility;
+pub use small_version::SmallVersion;
+pub use version_like::VersionLike;
 
-use bump_helpers::{between, bump_major, bump_minor, bump_patch, bump_pre};
-use version_like::VersionLike;
-
-use crate::bump_helpers::simplified_bounds_to_normal;
+use bump_helpers::{
+    between, bump_major, bump_minor, bump_patch, bump_pre, simplified_bounds_to_normal,
+};
 
 #[cfg(feature = "serde")]
 fn range_is_empty<V: PartialEq>(r: &Range<V>) -> bool {
