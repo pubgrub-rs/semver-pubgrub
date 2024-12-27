@@ -3,7 +3,10 @@ use std::{num::NonZeroU64, ops::Bound};
 use pubgrub::Range;
 use semver::{BuildMetadata, Prerelease, Version};
 
-use crate::bump_helpers::{bump_major, bump_minor, bump_patch};
+use crate::{
+    bump_helpers::{bump_major, bump_minor, bump_patch},
+    VersionLike,
+};
 
 /// A type that represents when cargo treats two Versions as compatible.
 /// Versions `a` and `b` are compatible if their left-most nonzero digit is the
@@ -96,19 +99,19 @@ impl SemverCompatibility {
     }
 }
 
-impl From<&Version> for SemverCompatibility {
-    fn from(ver: &Version) -> Self {
-        if let Some(m) = NonZeroU64::new(ver.major) {
+impl<V: VersionLike> From<&V> for SemverCompatibility {
+    fn from(ver: &V) -> Self {
+        if let Some(m) = NonZeroU64::new(ver.major()) {
             return SemverCompatibility::Major(m);
         }
-        if let Some(m) = NonZeroU64::new(ver.minor) {
+        if let Some(m) = NonZeroU64::new(ver.minor()) {
             return SemverCompatibility::Minor(m);
         }
-        SemverCompatibility::Patch(ver.patch)
+        SemverCompatibility::Patch(ver.patch())
     }
 }
 
-impl From<&SemverCompatibility> for Range<Version> {
+impl<V: From<Version> + Ord + Clone> From<&SemverCompatibility> for Range<V> {
     fn from(compat: &SemverCompatibility) -> Self {
         let low = compat.minimum();
         let hight = {

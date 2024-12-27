@@ -3,8 +3,7 @@ use std::ops::RangeBounds;
 
 use libfuzzer_sys::fuzz_target;
 
-use pubgrub::VersionSet as _;
-use semver::VersionReq;
+use semver::{Version, VersionReq};
 use semver_pubgrub::SemverPubgrub;
 use semver_pubgrub_fuzz::{ArbitraryComparator, ArbitraryVersion};
 
@@ -12,7 +11,7 @@ use semver_pubgrub_fuzz::{ArbitraryComparator, ArbitraryVersion};
 
 fn contains(req: &semver::VersionReq, ver: &semver::Version) {
     // println!("{req} |=> {ver}");
-    let pver: SemverPubgrub = req.into();
+    let pver: SemverPubgrub<Version> = req.into();
     let neg = pver.complement();
     let mat = req.matches(&ver);
     assert_eq!(mat, pver.contains(&ver), "matches {} |=> {}", req, ver);

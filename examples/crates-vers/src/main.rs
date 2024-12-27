@@ -3,7 +3,6 @@ use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressStyle};
-use pubgrub::VersionSet as _;
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
 use semver_pubgrub::{SemverCompatibility, SemverPubgrub};
@@ -56,7 +55,7 @@ fn get_files_from_index() {
     drop(file);
 }
 
-fn read_files() -> Option<(Vec<Version>, Vec<(VersionReq, SemverPubgrub)>)> {
+fn read_files() -> Option<(Vec<Version>, Vec<(VersionReq, SemverPubgrub<Version>)>)> {
     let mut versions: Vec<Version> = std::fs::read_to_string("./data/versions.csv")
         .ok()?
         .lines()
@@ -68,7 +67,7 @@ fn read_files() -> Option<(Vec<Version>, Vec<(VersionReq, SemverPubgrub)>)> {
         .lines()
         .filter_map(|req| req.parse::<VersionReq>().ok())
         .map(|req| {
-            let pver: SemverPubgrub = (&req).into();
+            let pver: SemverPubgrub<Version> = (&req).into();
             (req, pver)
         })
         .collect();
@@ -165,7 +164,7 @@ fn main() {
             .enumerate()
             .for_each(|(i, (pver, bs))| {
                 for (pver2, bs2) in &requirements[(i + 1)..] {
-                    let inter: SemverPubgrub = pver2.intersection(&pver);
+                    let inter: SemverPubgrub<Version> = pver2.intersection(&pver);
                     assert_eq!(inter, pver.intersection(&pver2));
                     let bs_inter: BitSet = (bs & bs2).into_iter().collect();
                     if inter == SemverPubgrub::empty() {

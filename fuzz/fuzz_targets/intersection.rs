@@ -2,7 +2,6 @@
 use std::ops::RangeBounds;
 
 use libfuzzer_sys::fuzz_target;
-use pubgrub::VersionSet as _;
 use semver::VersionReq;
 use semver_pubgrub::SemverPubgrub;
 use semver_pubgrub_fuzz::{ArbitraryComparator, ArbitraryVersion};
@@ -10,10 +9,10 @@ use semver_pubgrub_fuzz::{ArbitraryComparator, ArbitraryVersion};
 // cargo fuzz run intersection
 
 fn intersection(req: &semver::VersionReq, req2: &semver::VersionReq, ver: &semver::Version) {
-    let pver: SemverPubgrub = req.into();
-    let pver2: SemverPubgrub = req2.into();
+    let pver: SemverPubgrub<semver::Version> = req.into();
+    let pver2: SemverPubgrub<semver::Version> = req2.into();
 
-    let inter: SemverPubgrub = pver2.intersection(&pver);
+    let inter: SemverPubgrub<semver::Version> = pver2.intersection(&pver);
     let mat = req.matches(&ver) && req2.matches(&ver);
     assert_eq!(mat, inter.contains(&ver));
     if mat {

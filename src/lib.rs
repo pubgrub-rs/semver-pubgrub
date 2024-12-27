@@ -10,37 +10,39 @@ use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
 mod bump_helpers;
 mod semver_compatibility;
+mod version_like;
 
 pub use semver_compatibility::SemverCompatibility;
 
 use bump_helpers::{between, bump_major, bump_minor, bump_patch, bump_pre};
+use version_like::VersionLike;
 
 use crate::bump_helpers::simplified_bounds_to_normal;
 
 #[cfg(feature = "serde")]
-fn range_is_empty(r: &Range<Version>) -> bool {
+fn range_is_empty<V: PartialEq>(r: &Range<V>) -> bool {
     r == &Range::empty()
 }
 
 /// This needs to be bug-for-bug compatible with https://github.com/dtolnay/semver/blob/master/src/eval.rs
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
-pub struct SemverPubgrub {
+pub struct SemverPubgrub<V: VersionLike> {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "range_is_empty"))]
     #[cfg_attr(feature = "serde", serde(default = "Range::empty"))]
-    normal: Range<Version>,
+    normal: Range<V>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "range_is_empty"))]
     #[cfg_attr(feature = "serde", serde(default = "Range::empty"))]
-    pre: Range<Version>,
+    pre: Range<V>,
 }
 
-impl SemverPubgrub {
+impl<V: VersionLike> SemverPubgrub<V> {
     /// Convert to something that can be used with
     /// [BTreeMap::range](std::collections::BTreeMap::range).
     /// All versions contained in self, will be in the output,
     /// but there may be versions in the output that are not contained in self.
     /// Returns None if the range is empty.
-    pub fn bounding_range(&self) -> Option<(Bound<&Version>, Bound<&Version>)> {
+    pub fn bounding_range(&self) -> Option<(Bound<&V>, Bound<&V>)> {
         use Bound::*;
         let Some((ns, ne)) = self.normal.bounding_range() else {
             return self.pre.bounding_range();
@@ -74,7 +76,12 @@ impl SemverPubgrub {
         };
         Some((start, end))
     }
+}
 
+impl<V: VersionLike> SemverPubgrub<V>
+where
+    for<'a> SemverCompatibility: From<&'a V>,
+{
     /// Whether cargo would require that only one package matche this range.
     ///
     /// While this crate matches the semantics of `semver`
@@ -113,12 +120,12 @@ impl SemverPubgrub {
                 match (pe, next.minimum()) {
                     (Unbounded, _) => return None,
                     (Included(e), m) => {
-                        if e >= &m {
+                        if e >= &m.into() {
                             return None;
                         }
                     }
                     (Excluded(e), m) => {
-                        if e > &m {
+                        if e > &m.into() {
                             return None;
                         }
                     }
@@ -128,12 +135,12 @@ impl SemverPubgrub {
                 match (ne, next.canonical()) {
                     (Unbounded, _) => return None,
                     (Included(e), m) => {
-                        if e >= &m {
+                        if e >= &m.into() {
                             return None;
                         }
                     }
                     (Excluded(e), m) => {
-                        if e > &m {
+                        if e > &m.into() {
                             return None;
                         }
                     }
@@ -143,7 +150,9 @@ impl SemverPubgrub {
 
         Some(start)
     }
+}
 
+impl<V: VersionLike> SemverPubgrub<V> {
     /// Returns true if the this Range contains the specified values.
     ///
     /// The `versions` iterator must be sorted.
@@ -152,16 +161,16 @@ impl SemverPubgrub {
     pub fn contains_many<'s, I, BV>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
     where
         I: Iterator<Item = BV> + Clone + 's,
-        BV: Borrow<Version> + 's,
+        BV: Borrow<V> + 's,
     {
         let mut n_iter = self
             .normal
-            .contains_many(versions.clone().filter(|v| v.borrow().pre.is_empty()));
+            .contains_many(versions.clone().filter(|v| v.borrow().pre().is_empty()));
         let mut p_iter = self
             .pre
-            .contains_many(versions.clone().filter(|v| !v.borrow().pre.is_empty()));
+            .contains_many(versions.clone().filter(|v| !v.borrow().pre().is_empty()));
         versions.filter_map(move |v| {
-            if v.borrow().pre.is_empty() {
+            if v.borrow().pre().is_empty() {
                 n_iter.next()
             } else {
                 p_iter.next()
@@ -182,68 +191,51 @@ impl SemverPubgrub {
     pub fn simplify<'v, I, BV>(&self, versions: I) -> Self
     where
         I: Iterator<Item = BV> + Clone + 'v,
-        BV: Borrow<Version> + 'v,
+        BV: Borrow<V> + 'v,
     {
         Self {
             normal: self
                 .normal
-                .simplify(versions.clone().filter(|v| v.borrow().pre.is_empty())),
+                .simplify(versions.clone().filter(|v| v.borrow().pre().is_empty())),
             pre: self
                 .pre
-                .simplify(versions.filter(|v| !v.borrow().pre.is_empty())),
+                .simplify(versions.filter(|v| !v.borrow().pre().is_empty())),
         }
     }
 
     /// If the range was constructed using Singleton, return the version from the constructor.
     /// Otherwise, returns [None].
-    pub fn as_singleton(&self) -> Option<&Version> {
+    pub fn as_singleton(&self) -> Option<&V> {
         self.normal.as_singleton().xor(self.pre.as_singleton())
     }
 
     /// Iterate over the parts of the range that can match normal releases.
-    pub fn iter_normal(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+    pub fn iter_normal(&self) -> impl Iterator<Item = (&Bound<V>, &Bound<V>)> {
         self.normal.iter()
     }
 
     /// Iterate over the parts of the range that can match pre-releases.
-    pub fn iter_pre(&self) -> impl Iterator<Item = (&Bound<Version>, &Bound<Version>)> {
+    pub fn iter_pre(&self) -> impl Iterator<Item = (&Bound<V>, &Bound<V>)> {
         self.pre.iter()
     }
-}
 
-impl Display for SemverPubgrub {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        "SemverPubgrub { norml: ".fmt(f)?;
-        self.normal.fmt(f)?;
-        ", pre: ".fmt(f)?;
-        self.pre.fmt(f)?;
-        " } ".fmt(f)
-    }
-}
-
-impl From<&SemverCompatibility> for SemverPubgrub {
-    fn from(compat: &SemverCompatibility) -> Self {
-        let r = Range::from(compat);
-        Self {
-            normal: r.clone(),
-            pre: r,
-        }
-    }
-}
-
-impl VersionSet for SemverPubgrub {
-    type V = Version;
-
-    fn empty() -> Self {
+    pub fn empty() -> Self {
         SemverPubgrub {
             normal: Range::empty(),
             pre: Range::empty(),
         }
     }
 
-    fn singleton(v: Self::V) -> Self {
-        let is_pre = !v.pre.is_empty();
-        let singleton = Range::singleton(v);
+    pub fn full() -> Self {
+        SemverPubgrub {
+            normal: Range::full(),
+            pre: Range::full(),
+        }
+    }
+
+    pub fn singleton(v: V) -> Self {
+        let is_pre = !v.pre().is_empty();
+        let singleton = Range::<V>::singleton(v);
         if !is_pre {
             SemverPubgrub {
                 normal: singleton,
@@ -257,48 +249,108 @@ impl VersionSet for SemverPubgrub {
         }
     }
 
-    fn complement(&self) -> Self {
+    pub fn complement(&self) -> Self {
         SemverPubgrub {
             normal: self.normal.complement(),
             pre: self.pre.complement(),
         }
     }
 
-    fn intersection(&self, other: &Self) -> Self {
+    pub fn intersection(&self, other: &Self) -> Self {
         SemverPubgrub {
             normal: self.normal.intersection(&other.normal),
             pre: self.pre.intersection(&other.pre),
         }
     }
 
-    fn contains(&self, v: &Self::V) -> bool {
+    pub fn contains(&self, v: &V) -> bool {
         // This needs to be bug-for-bug compatible with matches_req https://github.com/dtolnay/semver/blob/master/src/eval.rs#L3
-        if v.pre.is_empty() {
+        if v.pre().is_empty() {
             self.normal.contains(v)
         } else {
             self.pre.contains(v)
         }
     }
 
-    fn union(&self, other: &Self) -> Self {
+    pub fn union(&self, other: &Self) -> Self {
         SemverPubgrub {
             normal: self.normal.union(&other.normal),
             pre: self.pre.union(&other.pre),
         }
     }
 
-    fn is_disjoint(&self, other: &Self) -> bool {
+    pub fn is_disjoint(&self, other: &Self) -> bool {
         self.normal.is_disjoint(&other.normal) && self.pre.is_disjoint(&other.pre)
     }
 
-    fn subset_of(&self, other: &Self) -> bool {
+    pub fn subset_of(&self, other: &Self) -> bool {
         self.normal.subset_of(&other.normal) && self.pre.subset_of(&other.pre)
     }
 }
 
-impl From<&VersionReq> for SemverPubgrub {
+impl<V: VersionLike + Display> Display for SemverPubgrub<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        "SemverPubgrub { norml: ".fmt(f)?;
+        self.normal.fmt(f)?;
+        ", pre: ".fmt(f)?;
+        self.pre.fmt(f)?;
+        " } ".fmt(f)
+    }
+}
+
+impl<V: VersionLike> From<&SemverCompatibility> for SemverPubgrub<V> {
+    fn from(compat: &SemverCompatibility) -> Self {
+        let r = Range::from(compat);
+        Self {
+            normal: r.clone(),
+            pre: r,
+        }
+    }
+}
+
+impl<V: std::fmt::Debug + Display + VersionLike> VersionSet for SemverPubgrub<V> {
+    type V = V;
+
+    fn empty() -> Self {
+        Self::empty()
+    }
+
+    fn full() -> Self {
+        Self::full()
+    }
+
+    fn singleton(v: Self::V) -> Self {
+        Self::singleton(v)
+    }
+
+    fn complement(&self) -> Self {
+        self.complement()
+    }
+
+    fn intersection(&self, other: &Self) -> Self {
+        self.intersection(other)
+    }
+
+    fn contains(&self, v: &V) -> bool {
+        self.contains(v)
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        self.union(other)
+    }
+
+    fn is_disjoint(&self, other: &Self) -> bool {
+        self.is_disjoint(other)
+    }
+
+    fn subset_of(&self, other: &Self) -> bool {
+        self.subset_of(other)
+    }
+}
+
+impl<V: VersionLike> From<&VersionReq> for SemverPubgrub<V> {
     fn from(req: &VersionReq) -> Self {
-        let mut out = SemverPubgrub::full();
+        let mut out = Self::full();
         // add to normal the intersection of cmps in req
         for cmp in &req.comparators {
             out = out.intersection(&matches_impl(cmp));
@@ -313,7 +365,7 @@ impl From<&VersionReq> for SemverPubgrub {
     }
 }
 
-fn matches_impl(cmp: &Comparator) -> SemverPubgrub {
+fn matches_impl<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L30
     match cmp.op {
         Op::Exact | Op::Wildcard => matches_exact(cmp),
@@ -327,15 +379,15 @@ fn matches_impl(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
+fn matches_exact<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L44
-    let low = Version {
+    let low = V::from(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
         pre: cmp.pre.clone(),
         build: BuildMetadata::EMPTY,
-    };
+    });
     if !cmp.pre.is_empty() {
         return SemverPubgrub {
             normal: Range::empty(),
@@ -356,7 +408,7 @@ fn matches_exact(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn matches_greater(cmp: &Comparator) -> SemverPubgrub {
+fn matches_greater<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L64
     let low = Version {
         major: cmp.major,
@@ -384,7 +436,7 @@ fn matches_greater(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn matches_less(cmp: &Comparator) -> SemverPubgrub {
+fn matches_less<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L90
     let out = Range::strictly_lower_than(Version {
         major: cmp.major,
@@ -403,15 +455,15 @@ fn matches_less(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
+fn matches_tilde<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L116
-    let low = Version {
+    let low = V::from(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
         pre: cmp.pre.clone(),
         build: BuildMetadata::EMPTY,
-    };
+    });
     if cmp.patch.is_some() {
         let out = between(low, bump_minor);
         return SemverPubgrub {
@@ -430,9 +482,9 @@ fn matches_tilde(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
+fn matches_caret<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L136
-    let low = Version {
+    let low = V::from(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
@@ -442,7 +494,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
             Prerelease::new("0").unwrap()
         },
         build: BuildMetadata::EMPTY,
-    };
+    });
     let Some(minor) = cmp.minor else {
         let out = between(low, bump_major);
         return SemverPubgrub {
@@ -476,7 +528,7 @@ fn matches_caret(cmp: &Comparator) -> SemverPubgrub {
     }
 }
 
-fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
+fn pre_is_compatible<V: VersionLike>(cmp: &Comparator) -> Range<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L176
     if cmp.pre.is_empty() {
         return Range::empty();
@@ -497,13 +549,12 @@ fn pre_is_compatible(cmp: &Comparator) -> Range<Version> {
     )
 }
 
-fn simplified_to_normal(input: &Range<Version>) -> Range<Version> {
-    input
-        .iter()
-        .map(|(from, to)| simplified_bounds_to_normal((from.clone(), to.clone())))
-        .map(|bounds| Range::from_range_bounds(bounds))
-        .reduce(|a, b| a.union(&b))
-        .unwrap_or_else(Range::empty)
+fn simplified_to_normal<V: VersionLike>(input: &Range<V>) -> Range<V> {
+    Range::from_iter(
+        input
+            .iter()
+            .map(|(from, to)| simplified_bounds_to_normal((from.clone(), to.clone()))),
+    )
 }
 
 #[cfg(test)]
@@ -532,7 +583,7 @@ mod test {
             ] {
                 let raw_req = format!("{op}{psot}");
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
-                let pver: SemverPubgrub = (&req).into();
+                let pver: SemverPubgrub<Version> = (&req).into();
                 let bounding_range = pver.bounding_range();
                 for raw_ver in ["18446744073709551615.1.0"] {
                     let ver = semver::Version::parse(raw_ver).unwrap();
@@ -574,7 +625,7 @@ mod test {
             ] {
                 let raw_req = format!("{op}{psot}");
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
-                let pver: SemverPubgrub = (&req).into();
+                let pver: SemverPubgrub<Version> = (&req).into();
                 let bounding_range = pver.bounding_range();
                 for raw_ver in ["0.0.0-0", "0.0.1-z0", "0.0.2-z0", "0.9.8-z", "1.0.1-z0"] {
                     let ver = semver::Version::parse(raw_ver).unwrap();
@@ -625,7 +676,7 @@ mod test {
             ] {
                 let raw_req = format!("{op}{psot}");
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
-                let pver: SemverPubgrub = (&req).into();
+                let pver: SemverPubgrub<Version> = (&req).into();
                 dbg!(raw_req);
 
                 let set: HashSet<_> = vers
@@ -666,9 +717,10 @@ mod test {
             pver.only_one_compatibility_range().unwrap();
         }
 
-        let req_unions = reqs
-            .iter()
-            .flat_map(|req1| reqs.iter().map(|req2: &SemverPubgrub| req1.union(req2)));
+        let req_unions = reqs.iter().flat_map(|req1| {
+            reqs.iter()
+                .map(|req2: &SemverPubgrub<Version>| req1.union(req2))
+        });
 
         for preq in req_unions {
             let set: HashSet<SemverCompatibility> = vers
