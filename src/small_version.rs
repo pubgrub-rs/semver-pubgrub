@@ -122,11 +122,11 @@ impl SmallVersion {
         }
     }
 
-    pub fn is_full(&self) -> bool {
+    fn is_full(&self) -> bool {
         !self.is_small()
     }
 
-    pub fn is_small(&self) -> bool {
+    fn is_small(&self) -> bool {
         // Safety: Given the alignment, a real pointer will have its smallest bit not set.
         // So if that is set then we must not be a pointer we must be a `Small`.
         assert!(core::mem::align_of::<semver::Version>() > 1);
