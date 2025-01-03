@@ -1,10 +1,14 @@
 use std::sync::Arc;
 
+use zerocopy::{IntoBytes, TryFromBytes};
+
 use crate::VersionLike;
 
 /// A module boundary to emulate unsafe fields.
 mod def {
     use std::sync::Arc;
+
+    use super::PackedVersion;
 
     /// polyfill for `std::ptr::without_provenance`
     ///
@@ -114,42 +118,71 @@ mod def {
             self.raw.addr() & 1 == 1
         }
     }
-
-    #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord)]
-    pub(super) struct PackedVersion {
-        /// # Safety
-        ///
-        /// The least significant bit is `0`.
-        ///
-        /// # Invariants
-        ///
-        /// The most significant [`Elem`] encodes a SemVer major version,
-        /// the next encodes a minor version, and the next encodes a patch
-        /// version. The most significant bit of the least significant
-        /// `Elem` is `1` if the version is a pre-release; otherwise `0`.
-        raw: usize,
-    }
-
-    impl PackedVersion {
-        /// Constructs a packed version.
-        ///
-        /// # Panics
-        ///
-        /// Panics if the least significant bit of `raw` is `0`.
-        pub(super) fn from_raw(raw: usize) -> Self {
-            // Enforce
-            assert_eq!(raw & 1, 1);
-            // SAFETY: Invariants guaranteed by above assertion.
-            Self { raw }
-        }
-        /// Produces the raw packed representation.
-        pub(super) fn into_raw(self) -> usize {
-            self.raw
-        }
-    }
 }
 
 pub use def::*;
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord, TryFromBytes, IntoBytes)]
+#[cfg_attr(target_pointer_width = "32", repr(u8))]
+#[cfg_attr(target_pointer_width = "64", repr(u16))]
+enum Pre {
+    // for Safty there must not be a reper with a 0 for the least significant bit
+    Smallest = 1,
+    Empty = 3,
+}
+
+// A type small enough that we can put four of them in a pointer.
+#[cfg(target_pointer_width = "64")]
+type Elem = u16;
+#[cfg(target_pointer_width = "32")]
+type Elem = u8;
+
+#[derive(Debug, Eq, Copy, Clone, IntoBytes, TryFromBytes)]
+#[repr(C)]
+struct PackedVersion {
+    pre: Pre,
+    patch: Elem,
+    minor: Elem,
+    major: Elem,
+}
+
+impl std::hash::Hash for PackedVersion {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.into_raw().hash(state);
+    }
+}
+
+impl PartialEq for PackedVersion {
+    fn eq(&self, other: &Self) -> bool {
+        self.into_raw() == other.into_raw()
+    }
+}
+
+impl PartialOrd for PackedVersion {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackedVersion {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.into_raw().cmp(&other.into_raw())
+    }
+}
+
+impl PackedVersion {
+    fn into_raw(self) -> usize {
+        let out = zerocopy::transmute!(self);
+        assert_eq!(out & 1, 1);
+        out
+    }
+
+    fn from_raw(raw: usize) -> Option<Self> {
+        let out = zerocopy::try_transmute!(raw).ok()?;
+        assert_eq!(raw & 1, 1);
+        Some(out)
+    }
+}
 
 impl From<semver::Version> for SmallVersion {
     fn from(v: semver::Version) -> Self {
@@ -180,7 +213,7 @@ impl<'a> From<&'a SmallVersion> for RefIner<'a> {
         if let Some(v) = v.as_ref() {
             Self::Full(v)
         } else {
-            Self::Packed(PackedVersion::from_raw(v.addr()))
+            Self::Packed(PackedVersion::from_raw(v.addr()).unwrap())
         }
     }
 }
@@ -220,56 +253,42 @@ impl PartialEq for SmallVersion {
     }
 }
 
-// A type small enough that we can put four of them in a pointer.
-#[cfg(target_pointer_width = "64")]
-type Elem = u16;
-#[cfg(target_pointer_width = "32")]
-type Elem = u8;
-
 impl TryFrom<&semver::Version> for PackedVersion {
     type Error = ();
     fn try_from(v: &semver::Version) -> Result<Self, Self::Error> {
         if !v.build.is_empty() {
             return Err(());
         }
-
-        let to_be = |n: u64| -> Result<usize, Self::Error> {
-            Ok(Elem::try_from(n).map_err(|_| ())? as usize)
-        };
-
-        let mut ret = to_be(v.major)?;
-        ret <<= Elem::BITS as usize;
-        ret |= to_be(v.minor)?;
-        ret <<= Elem::BITS as usize;
-        ret |= to_be(v.patch)?;
-        ret <<= Elem::BITS as usize;
-
-        ret |= if v.pre.is_empty() {
-            Elem::MAX as usize
-        } else if v.pre.as_str() == "0" {
-            (Elem::MAX / 2) as usize
-        } else {
-            return Err(());
-        };
-        Ok(Self::from_raw(ret))
+        Ok(Self {
+            major: v.major.try_into().map_err(|_| ())?,
+            minor: v.minor.try_into().map_err(|_| ())?,
+            patch: v.patch.try_into().map_err(|_| ())?,
+            pre: if v.pre.is_empty() {
+                Pre::Empty
+            } else if v.pre.as_str() == "0" {
+                Pre::Smallest
+            } else {
+                return Err(());
+            },
+        })
     }
 }
 
 impl PackedVersion {
     fn major(&self) -> u64 {
-        (self.into_raw() >> (3 * Elem::BITS)) as _
+        self.major as _
     }
 
     fn minor(&self) -> u64 {
-        (self.into_raw() >> (2 * Elem::BITS) as usize & Elem::MAX as usize) as _
+        self.minor as _
     }
 
     fn patch(&self) -> u64 {
-        (self.into_raw() >> (1 * Elem::BITS) as usize & Elem::MAX as usize) as _
+        self.patch as _
     }
 
     fn pre_is_empty(&self) -> bool {
-        self.into_raw() & (Elem::MAX as usize) == (Elem::MAX as usize)
+        self.pre == Pre::Empty
     }
 
     fn pre(&self) -> &'static str {
