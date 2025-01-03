@@ -27,11 +27,7 @@ struct Small(usize);
 impl SmallVersion {
     fn new_full(v: semver::Version) -> Self {
         // Safety: Remember that owning a `SmallVersion` that is a `Full` is equivalent to owning an `Arc`.
-        let out = Self(Arc::into_raw(Arc::new(v)));
-        // Safety: We always check that a newly constructed `SmallVersion` has been tagged correctly
-        // before we return it to code outside this module.
-        assert!(out.is_full());
-        out
+        Self(Arc::into_raw(Arc::new(v))).assert_full()
     }
 }
 
@@ -61,13 +57,7 @@ impl Clone for SmallVersion {
 impl From<semver::Version> for SmallVersion {
     fn from(v: semver::Version) -> Self {
         match (&v).try_into() {
-            Ok(Small(s)) => {
-                let out = SmallVersion(without_provenance(s));
-                // Safety: We always check that a newly constructed `SmallVersion` has been tagged correctly
-                // before we return it to code outside this module.
-                assert!(out.is_small());
-                out
-            }
+            Ok(Small(s)) => SmallVersion(without_provenance(s)).assert_small(),
             Err(()) => SmallVersion::new_full(v),
         }
     }
@@ -76,13 +66,7 @@ impl From<semver::Version> for SmallVersion {
 impl From<&semver::Version> for SmallVersion {
     fn from(v: &semver::Version) -> Self {
         match v.try_into() {
-            Ok(Small(s)) => {
-                let out = SmallVersion(without_provenance(s));
-                // Safety: We always check that a newly constructed `SmallVersion` has been tagged correctly
-                // before we return it to code outside this module.
-                assert!(out.is_small());
-                out
-            }
+            Ok(Small(s)) => SmallVersion(without_provenance(s)).assert_small(),
             Err(()) => SmallVersion::new_full(v.clone()),
         }
     }
@@ -126,11 +110,25 @@ impl SmallVersion {
         !self.is_small()
     }
 
+    #[track_caller]
+    #[inline(always)]
+    fn assert_full(self) -> Self {
+        assert!(self.is_full(), "Returned incorrectly tagged pointer, which will brake safety invariance of this module");
+        self
+    }
+
     fn is_small(&self) -> bool {
         // Safety: Given the alignment, a real pointer will have its smallest bit not set.
         // So if that is set then we must not be a pointer we must be a `Small`.
         assert!(core::mem::align_of::<semver::Version>() > 1);
         self.0.addr() & 1 == 1
+    }
+
+    #[track_caller]
+    #[inline(always)]
+    fn assert_small(self) -> Self {
+        assert!(self.is_small(), "Returned incorrectly tagged pointer, which will brake safety invariance of this module");
+        self
     }
 }
 
