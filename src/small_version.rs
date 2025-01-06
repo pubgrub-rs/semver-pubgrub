@@ -113,6 +113,10 @@ mod def {
 
 pub use def::*;
 
+// Safety: We are a `Arc` in disguise. `Arc` is `Send + Sync` so we are too.
+unsafe impl Send for SmallVersion {}
+unsafe impl Sync for SmallVersion {}
+
 // A type small enough that we can put four of them in a pointer.
 #[cfg(target_pointer_width = "64")]
 type Elem = u16;
