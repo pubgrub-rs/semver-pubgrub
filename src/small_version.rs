@@ -6,18 +6,9 @@ use crate::VersionLike;
 
 /// A module boundary to emulate unsafe fields.
 mod def {
-    use std::sync::Arc;
+    use std::{ptr::without_provenance, sync::Arc};
 
     use super::PackedVersion;
-
-    /// polyfill for `std::ptr::without_provenance`
-    ///
-    /// # Safety
-    ///
-    /// The resulting pointer must never be dereferenced.
-    pub fn without_provenance(addr: usize) -> *const semver::Version {
-        std::ptr::null::<semver::Version>().with_addr(addr)
-    }
 
     /// A one pointer wide representation of common `semver::Version`s or a `Arc<semver::Version>`
     ///
@@ -60,7 +51,7 @@ mod def {
         pub(super) fn from_packed(packed: PackedVersion) -> Self {
             // Safety: Came from a `PackedVersion` and the  least significant is bit `1` as required.
             // With it tagged as coming froma a `PackedVersion` this pointer will never be dereferenced.
-            let raw = without_provenance(packed.into_raw());
+            let raw: *const semver::Version = without_provenance(packed.into_raw());
             assert!(
                 raw.addr() & 1 == 1,
                 "Incorrectly tagged pointer, which will brake safety invariance of this module"
