@@ -122,20 +122,30 @@ mod def {
 
 pub use def::*;
 
-#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord, TryFromBytes, IntoBytes)]
-#[cfg_attr(target_pointer_width = "32", repr(u8))]
-#[cfg_attr(target_pointer_width = "64", repr(u16))]
-enum Pre {
-    // for Safty there must not be a reper with a 0 for the least significant bit
-    Smallest = 1,
-    Empty = 3,
-}
-
 // A type small enough that we can put four of them in a pointer.
 #[cfg(target_pointer_width = "64")]
 type Elem = u16;
 #[cfg(target_pointer_width = "32")]
 type Elem = u8;
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord, TryFromBytes, IntoBytes)]
+#[cfg_attr(target_pointer_width = "32", repr(u8))]
+#[cfg_attr(target_pointer_width = "64", repr(u16))]
+enum Pre {
+    Smallest = 1,
+    Empty = 3,
+}
+
+#[test]
+fn lsd_is_one() {
+    for i in 0..=(Elem::MAX as Elem) {
+        let tans: Result<Pre, _> = zerocopy::try_transmute!(i);
+        if i & 1 == 0 {
+            // for Safty there must not be a reper with a 0 for the least significant bit
+            assert!(tans.is_err(), "{i:#x} should not be a valid Pre");
+        }
+    }
+}
 
 #[derive(Debug, Eq, Copy, Clone, IntoBytes, TryFromBytes)]
 #[repr(C)]
@@ -292,10 +302,9 @@ impl PackedVersion {
     }
 
     fn pre(&self) -> &'static str {
-        if self.pre_is_empty() {
-            ""
-        } else {
-            "0"
+        match self.pre {
+            Pre::Empty => "",
+            Pre::Smallest => "0",
         }
     }
 }
