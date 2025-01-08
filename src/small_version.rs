@@ -54,7 +54,7 @@ mod def {
             let raw: *const semver::Version = without_provenance(packed.into_raw());
             assert!(
                 raw.addr() & 1 == 1,
-                "Incorrectly tagged pointer, which will brake safety invariance of this module"
+                "Incorrectly tagged pointer, which will brake safety invariants of `SmallVersion`"
             );
             Self { raw }
         }
