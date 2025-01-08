@@ -123,11 +123,18 @@ type Elem = u16;
 #[cfg(target_pointer_width = "32")]
 type Elem = u8;
 
+/// Is this a pre-release version?
+///
+/// # Safety
+///
+/// Unsafe code may expect that the least significant bit of `Pre` is `1`.
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash, PartialOrd, Ord, TryFromBytes, IntoBytes)]
 #[cfg_attr(target_pointer_width = "32", repr(u8))]
 #[cfg_attr(target_pointer_width = "64", repr(u16))]
 enum Pre {
+    /// The pre-release string is "0".
     Smallest = 1,
+    /// Not a pre-release.
     Empty = 3,
 }
 
