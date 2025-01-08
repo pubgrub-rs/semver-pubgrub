@@ -28,7 +28,8 @@ mod def {
         /// # Safety
         ///
         /// If and only if the least significant is `0`, `raw` is derived from
-        /// [`Arc::into_raw`].
+        /// [`Arc::into_raw`]. The correct reference counts must be
+        /// maintained; e.g., if `SmallVersion` is cloned.
         ///
         /// # Invariants
         ///
