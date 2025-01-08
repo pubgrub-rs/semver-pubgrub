@@ -83,6 +83,8 @@ mod def {
                 // We know that the ptr is still valid, because we have a reference to self.
                 unsafe { Arc::increment_strong_count(self.raw) };
             }
+            // SAFETY: `self.raw` conforms to `raw`'s invariants, and we have discharged
+            // the requirement that correct reference counts are maintained.
             Self { raw: self.raw }
         }
     }
