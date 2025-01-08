@@ -10,8 +10,8 @@ use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
 mod bump_helpers;
 mod semver_compatibility;
-mod version_like;
 mod small_version;
+mod version_like;
 
 pub use semver_compatibility::SemverCompatibility;
 pub use small_version::SmallVersion;

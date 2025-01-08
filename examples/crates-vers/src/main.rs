@@ -104,11 +104,11 @@ fn main() {
         assert_eq!(v1.patch, s1.patch());
         assert_eq!(v1.pre.as_str(), s1.pre());
         // small version round trips
-        let v: Version = s.into_version();
+        let v: Version = s1.into_version();
         assert_eq!(v1, &v);
         for v2 in &versions {
             let s2: SmallVersion = v2.into();
-            assert_eq!(s1.cmp(&s2), v1.cmp(v2));
+            assert_eq!(s1.cmp(&s2), v1.cmp(v2), "{v1} {s1:#?} cmp {v2} {s2:#?} ");
             assert_eq!(s1 == s2, v1 == v2);
         }
     });

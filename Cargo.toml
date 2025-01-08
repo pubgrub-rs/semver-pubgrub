@@ -17,6 +17,7 @@ categories = ["algorithms"]
 semver = "1.0.13"
 pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="dev" }
 serde = { version = "1.0", features = ["derive"], optional = true }
+zerocopy = { version = "0.8.14", features = ["derive"] }
 
 [features]
 serde = ["dep:serde", "pubgrub/serde", "semver/serde"]
