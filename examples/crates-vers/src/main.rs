@@ -83,6 +83,7 @@ fn main() {
     }
 
     let intersection = arg.is_empty() || arg.contains(&"intersection".to_string());
+    let difference = arg.is_empty() || arg.contains(&"difference".to_string());
     let contains = arg.is_empty() || arg.contains(&"contains".to_string());
 
     let Some((versions, requirements)) = read_files() else {
@@ -216,6 +217,43 @@ fn main() {
                                 assert_eq!(inter.contains(ver), inter_mat);
                             }
                             assert_eq!(mat, inter.contains(ver));
+                        }
+                    }
+                }
+            })
+    }
+
+    if difference {
+        let template = "difference: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
+        let style = ProgressBar::new(requirements.len() as u64)
+            .with_style(ProgressStyle::with_template(template).unwrap())
+            .with_finish(ProgressFinish::AndLeave);
+
+        requirements
+            .par_iter()
+            .progress_with(style)
+            .for_each(|(pver, bs)| {
+                for (pver2, bs2) in &requirements {
+                    let diff = pver.difference(pver2);
+                    let bs_diff: BitSet = (bs & !bs2).into_iter().collect();
+                    if diff == SemverPubgrub::empty() {
+                        assert!(bs_diff.is_empty());
+                        assert!(diff.bounding_range().is_none());
+                    } else if &diff == pver {
+                        assert_eq!(&bs_diff, bs);
+                    } else {
+                        let bounding_range = diff.bounding_range().expect("diff is not empty");
+                        for ((id, ver), diff_mat) in versions
+                            .iter()
+                            .enumerate()
+                            .zip(diff.contains_many(versions.iter()))
+                        {
+                            let mat = bs_diff.contains(id as u32);
+                            assert_eq!(mat, diff_mat);
+                            assert_eq!(mat, diff.contains(ver));
+                            if mat {
+                                assert!(bounding_range.contains(ver));
+                            }
                         }
                     }
                 }

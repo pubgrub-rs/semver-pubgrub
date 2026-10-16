@@ -39,3 +39,9 @@ name = "intersection"
 path = "fuzz_targets/intersection.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "difference"
+path = "fuzz_targets/difference.rs"
+test = false
+doc = false

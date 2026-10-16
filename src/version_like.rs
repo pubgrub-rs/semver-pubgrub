@@ -1,5 +1,6 @@
 use semver::Version;
 
+/// The implementation of Ord must match the semantic versioning rules.
 pub trait VersionLike: From<Version> + Clone + Ord {
     fn major(&self) -> u64;
     fn minor(&self) -> u64;

@@ -272,6 +272,13 @@ impl<V: VersionLike> SemverPubgrub<V> {
         }
     }
 
+    pub fn difference(&self, other: &Self) -> Self {
+        SemverPubgrub {
+            normal: self.normal.difference(&other.normal),
+            pre: self.pre.difference(&other.pre),
+        }
+    }
+
     pub fn contains(&self, v: &V) -> bool {
         // This needs to be bug-for-bug compatible with matches_req https://github.com/dtolnay/semver/blob/master/src/eval.rs#L3
         if v.pre().is_empty() {
@@ -338,6 +345,10 @@ impl<V: std::fmt::Debug + Display + VersionLike + Hash> VersionSet for SemverPub
 
     fn intersection(&self, other: &Self) -> Self {
         self.intersection(other)
+    }
+
+    fn difference(&self, other: &Self) -> Self {
+        self.difference(other)
     }
 
     fn contains(&self, v: &V) -> bool {
@@ -558,6 +569,7 @@ fn pre_is_compatible<V: VersionLike>(cmp: &Comparator) -> Ranges<V> {
     )
 }
 
+// TODO: Perhaps this should be called after constructing SemverPubgrub. intersection, complement, ect.
 fn simplified_to_normal<V: VersionLike>(input: &Ranges<V>) -> Ranges<V> {
     Ranges::from_iter(
         input
