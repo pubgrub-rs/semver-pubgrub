@@ -209,7 +209,13 @@ impl<V: VersionLike> SemverPubgrub<V> {
     /// If the range was constructed using Singleton, return the version from the constructor.
     /// Otherwise, returns [None].
     pub fn as_singleton(&self) -> Option<&V> {
-        self.normal.as_singleton().xor(self.pre.as_singleton())
+        if self.pre.is_empty() {
+            self.normal.as_singleton()
+        } else if self.normal.is_empty() {
+            self.pre.as_singleton()
+        } else {
+            None
+        }
     }
 
     /// Iterate over the parts of the range that can match normal releases.
@@ -724,6 +730,30 @@ mod test {
         let req_unions = reqs.iter().flat_map(|req1| {
             reqs.iter()
                 .map(|req2: &SemverPubgrub<Version>| req1.union(req2))
+        });
+
+        for preq in req_unions {
+            let set: HashSet<SemverCompatibility> = vers
+                .iter()
+                .filter(|ver| preq.contains(ver))
+                .map(|ver| ver.into())
+                .collect();
+            let only_one_comp = preq.only_one_compatibility_range();
+            dbg!(&preq, &set, only_one_comp);
+            assert_eq!(set.len() <= 1, only_one_comp.is_some());
+            if only_one_comp.is_none() {
+                assert!(preq.as_singleton().is_none());
+            }
+            if preq.as_singleton().is_some() {
+                assert_eq!(set.len(), 1);
+            }
+        }
+
+        let req_unions = reqs.iter().flat_map(|req1| {
+            reqs.iter().flat_map(|req2| {
+                reqs.iter()
+                    .map(|req3: &SemverPubgrub<Version>| req1.union(req2).union(req3))
+            })
         });
 
         for preq in req_unions {
