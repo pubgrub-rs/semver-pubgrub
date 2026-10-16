@@ -2,6 +2,7 @@ use std::{
     borrow::Borrow,
     cmp::{max, min},
     fmt::Display,
+    hash::Hash,
     ops::Bound,
 };
 
@@ -212,12 +213,12 @@ impl<V: VersionLike> SemverPubgrub<V> {
     }
 
     /// Iterate over the parts of the range that can match normal releases.
-    pub fn iter_normal(&self) -> impl Iterator<Item = (&Bound<V>, &Bound<V>)> {
+    pub fn iter_normal(&self) -> impl DoubleEndedIterator<Item = (Bound<&V>, Bound<&V>)> {
         self.normal.iter()
     }
 
     /// Iterate over the parts of the range that can match pre-releases.
-    pub fn iter_pre(&self) -> impl Iterator<Item = (&Bound<V>, &Bound<V>)> {
+    pub fn iter_pre(&self) -> impl DoubleEndedIterator<Item = (Bound<&V>, Bound<&V>)> {
         self.pre.iter()
     }
 
@@ -310,7 +311,7 @@ impl<V: VersionLike> From<&SemverCompatibility> for SemverPubgrub<V> {
     }
 }
 
-impl<V: std::fmt::Debug + Display + VersionLike> VersionSet for SemverPubgrub<V> {
+impl<V: std::fmt::Debug + Display + VersionLike + Hash> VersionSet for SemverPubgrub<V> {
     type V = V;
 
     fn empty() -> Self {
@@ -555,7 +556,7 @@ fn simplified_to_normal<V: VersionLike>(input: &Range<V>) -> Range<V> {
     Range::from_iter(
         input
             .iter()
-            .map(|(from, to)| simplified_bounds_to_normal((from.clone(), to.clone()))),
+            .map(|(from, to)| simplified_bounds_to_normal((from.cloned(), to.cloned()))),
     )
 }
 
