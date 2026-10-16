@@ -6,7 +6,7 @@ use std::{
     ops::Bound,
 };
 
-use pubgrub::{Range, VersionSet};
+use pubgrub::{Ranges, VersionSet};
 use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
 mod bump_helpers;
@@ -23,8 +23,8 @@ use bump_helpers::{
 };
 
 #[cfg(feature = "serde")]
-fn range_is_empty<V: PartialEq>(r: &Range<V>) -> bool {
-    r == &Range::empty()
+fn range_is_empty<V: PartialEq>(r: &Ranges<V>) -> bool {
+    r == &Ranges::empty()
 }
 
 /// This needs to be bug-for-bug compatible with https://github.com/dtolnay/semver/blob/master/src/eval.rs
@@ -32,11 +32,11 @@ fn range_is_empty<V: PartialEq>(r: &Range<V>) -> bool {
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct SemverPubgrub<V: VersionLike> {
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "range_is_empty"))]
-    #[cfg_attr(feature = "serde", serde(default = "Range::empty"))]
-    normal: Range<V>,
+    #[cfg_attr(feature = "serde", serde(default = "Ranges::empty"))]
+    normal: Ranges<V>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "range_is_empty"))]
-    #[cfg_attr(feature = "serde", serde(default = "Range::empty"))]
-    pre: Range<V>,
+    #[cfg_attr(feature = "serde", serde(default = "Ranges::empty"))]
+    pre: Ranges<V>,
 }
 
 impl<V: VersionLike> SemverPubgrub<V> {
@@ -156,7 +156,7 @@ where
 }
 
 impl<V: VersionLike> SemverPubgrub<V> {
-    /// Returns true if the this Range contains the specified values.
+    /// Returns true if this range contains the specified values.
     ///
     /// The `versions` iterator must be sorted.
     /// Functionally equivalent to `versions.map(|v| self.contains(v))`.
@@ -181,7 +181,7 @@ impl<V: VersionLike> SemverPubgrub<V> {
         })
     }
 
-    /// Returns a simpler Range that contains the same versions
+    /// Returns a simpler range that contains the same versions
     ///
     /// For every one of the Versions provided in versions the existing range and
     /// the simplified range will agree on whether it is contained.
@@ -224,29 +224,29 @@ impl<V: VersionLike> SemverPubgrub<V> {
 
     pub fn empty() -> Self {
         SemverPubgrub {
-            normal: Range::empty(),
-            pre: Range::empty(),
+            normal: Ranges::empty(),
+            pre: Ranges::empty(),
         }
     }
 
     pub fn full() -> Self {
         SemverPubgrub {
-            normal: Range::full(),
-            pre: Range::full(),
+            normal: Ranges::full(),
+            pre: Ranges::full(),
         }
     }
 
     pub fn singleton(v: V) -> Self {
         let is_pre = !v.pre().is_empty();
-        let singleton = Range::<V>::singleton(v);
+        let singleton = Ranges::<V>::singleton(v);
         if !is_pre {
             SemverPubgrub {
                 normal: singleton,
-                pre: Range::empty(),
+                pre: Ranges::empty(),
             }
         } else {
             SemverPubgrub {
-                normal: Range::empty(),
+                normal: Ranges::empty(),
                 pre: singleton,
             }
         }
@@ -303,7 +303,7 @@ impl<V: VersionLike + Display> Display for SemverPubgrub<V> {
 
 impl<V: VersionLike> From<&SemverCompatibility> for SemverPubgrub<V> {
     fn from(compat: &SemverCompatibility) -> Self {
-        let r = Range::from(compat);
+        let r = Ranges::from(compat);
         Self {
             normal: r.clone(),
             pre: r,
@@ -358,7 +358,7 @@ impl<V: VersionLike> From<&VersionReq> for SemverPubgrub<V> {
         for cmp in &req.comparators {
             out = out.intersection(&matches_impl(cmp));
         }
-        let mut pre = Range::empty();
+        let mut pre = Ranges::empty();
         // add to pre the union of cmps in req
         for cmp in &req.comparators {
             pre = pre.union(&pre_is_compatible(cmp));
@@ -393,7 +393,7 @@ fn matches_exact<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     });
     if !cmp.pre.is_empty() {
         return SemverPubgrub {
-            normal: Range::empty(),
+            normal: Ranges::empty(),
             pre: between(low, bump_pre),
         };
     }
@@ -407,7 +407,7 @@ fn matches_exact<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
 
     SemverPubgrub {
         normal: simplified_to_normal(&normal),
-        pre: Range::empty(),
+        pre: Ranges::empty(),
     }
 }
 
@@ -432,7 +432,7 @@ fn matches_greater<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
         Bound::Excluded(v) => Bound::Included(v),
         Bound::Unbounded => return SemverPubgrub::empty(),
     };
-    let out = Range::from_range_bounds((low_bound, Bound::Unbounded));
+    let out = Ranges::from_range_bounds((low_bound, Bound::Unbounded));
     SemverPubgrub {
         normal: simplified_to_normal(&out),
         pre: out,
@@ -441,7 +441,7 @@ fn matches_greater<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
 
 fn matches_less<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L90
-    let out = Range::strictly_lower_than(Version {
+    let out = Ranges::strictly_lower_than(Version {
         major: cmp.major,
         minor: cmp.minor.unwrap_or(0),
         patch: cmp.patch.unwrap_or(0),
@@ -481,7 +481,7 @@ fn matches_tilde<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     };
     SemverPubgrub {
         normal: simplified_to_normal(&normal),
-        pre: Range::empty(),
+        pre: Ranges::empty(),
     }
 }
 
@@ -531,16 +531,16 @@ fn matches_caret<V: VersionLike>(cmp: &Comparator) -> SemverPubgrub<V> {
     }
 }
 
-fn pre_is_compatible<V: VersionLike>(cmp: &Comparator) -> Range<V> {
+fn pre_is_compatible<V: VersionLike>(cmp: &Comparator) -> Ranges<V> {
     // https://github.com/dtolnay/semver/blob/master/src/eval.rs#L176
     if cmp.pre.is_empty() {
-        return Range::empty();
+        return Ranges::empty();
     }
     let (Some(minor), Some(patch)) = (cmp.minor, cmp.patch) else {
-        return Range::empty();
+        return Ranges::empty();
     };
 
-    Range::between(
+    Ranges::between(
         Version {
             major: cmp.major,
             minor,
@@ -552,8 +552,8 @@ fn pre_is_compatible<V: VersionLike>(cmp: &Comparator) -> Range<V> {
     )
 }
 
-fn simplified_to_normal<V: VersionLike>(input: &Range<V>) -> Range<V> {
-    Range::from_iter(
+fn simplified_to_normal<V: VersionLike>(input: &Ranges<V>) -> Ranges<V> {
+    Ranges::from_iter(
         input
             .iter()
             .map(|(from, to)| simplified_bounds_to_normal((from.cloned(), to.cloned()))),

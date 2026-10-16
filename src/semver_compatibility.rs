@@ -1,6 +1,6 @@
 use std::{num::NonZeroU64, ops::Bound};
 
-use pubgrub::Range;
+use pubgrub::Ranges;
 use semver::{BuildMetadata, Prerelease, Version};
 
 use crate::{
@@ -111,7 +111,7 @@ impl<V: VersionLike> From<&V> for SemverCompatibility {
     }
 }
 
-impl<V: From<Version> + Ord + Clone> From<&SemverCompatibility> for Range<V> {
+impl<V: From<Version> + Ord + Clone> From<&SemverCompatibility> for Ranges<V> {
     fn from(compat: &SemverCompatibility) -> Self {
         let low = compat.minimum();
         let hight = {
@@ -121,6 +121,6 @@ impl<V: From<Version> + Ord + Clone> From<&SemverCompatibility> for Range<V> {
                 SemverCompatibility::Patch(_) => bump_patch(&low),
             }
         };
-        Range::from_range_bounds((Bound::Included(low), hight))
+        Ranges::from_range_bounds((Bound::Included(low), hight))
     }
 }

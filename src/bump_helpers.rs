@@ -1,6 +1,6 @@
 use std::ops::Bound;
 
-use pubgrub::Range;
+use pubgrub::Ranges;
 
 use semver::BuildMetadata;
 use semver::Prerelease;
@@ -61,9 +61,9 @@ pub(crate) fn bump_pre<V: VersionLike>(v: &V) -> Bound<V> {
     }
 }
 
-pub(crate) fn between<V: Clone + Ord>(low: V, into: impl Fn(&V) -> Bound<V>) -> Range<V> {
+pub(crate) fn between<V: Clone + Ord>(low: V, into: impl Fn(&V) -> Bound<V>) -> Ranges<V> {
     let hight = into(&low);
-    Range::from_range_bounds((Bound::Included(low), hight))
+    Ranges::from_range_bounds((Bound::Included(low), hight))
 }
 
 fn bump_up_to_normal<V: VersionLike>(v: &V) -> Option<V> {
