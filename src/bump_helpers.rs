@@ -68,7 +68,7 @@ pub(crate) fn between<V: Clone + Ord>(low: V, into: impl Fn(&V) -> Bound<V>) -> 
 
 fn bump_up_to_normal<V: VersionLike>(v: &V) -> Option<V> {
     if v.pre().is_empty() {
-        return None;
+        None
     } else {
         Some(V::from(Version {
             major: v.major(),

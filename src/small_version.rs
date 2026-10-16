@@ -21,7 +21,7 @@ mod def {
     /// The exact set of versions that are common enough to get a small representation depends on the size of a pointer
     /// and is subject to change between releases.
     #[derive(Debug, Eq)]
-    #[repr(packed)]
+    #[repr(Rust, packed)]
     pub struct SmallVersion {
         /// The version, either packed into a pointer, or allocated on the heap.
         ///
@@ -64,7 +64,7 @@ mod def {
             self.raw.addr()
         }
 
-        pub(super) fn as_ref<'a>(&'a self) -> Option<&'a semver::Version> {
+        pub(super) fn as_ref(&self) -> Option<&semver::Version> {
             self.is_full().then(|| {
                 let ptr = self.raw;
                 // Safety: The ptr is valid until the last `SmallVersion` referencing it is dropped.

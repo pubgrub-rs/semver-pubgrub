@@ -588,6 +588,7 @@ mod test {
                 let req = semver::VersionReq::parse(&raw_req).unwrap();
                 let pver: SemverPubgrub<Version> = (&req).into();
                 let bounding_range = pver.bounding_range();
+                #[allow(clippy::single_element_loop)]
                 for raw_ver in ["18446744073709551615.1.0"] {
                     let ver = semver::Version::parse(raw_ver).unwrap();
                     let mat = req.matches(&ver);
@@ -657,7 +658,7 @@ mod test {
         ];
         let vers = raw_vers.map(|raw_ver| semver::Version::parse(raw_ver).unwrap());
         assert!(vers.is_sorted());
-        assert!(vers.is_sorted_by_key(|v| SemverCompatibility::from(v)));
+        assert!(vers.is_sorted_by_key(SemverCompatibility::from));
         for op in OPS {
             for psot in [
                 "0.0.0-r",
@@ -685,12 +686,12 @@ mod test {
                 let set: HashSet<_> = vers
                     .iter()
                     .filter_map(|ver| {
-                        let mat = req.matches(&ver);
-                        if mat != pver.contains(&ver) {
+                        let mat = req.matches(ver);
+                        if mat != pver.contains(ver) {
                             eprintln!("{}", ver);
                             eprintln!("{}", req);
                             dbg!(&pver);
-                            assert_eq!(mat, pver.contains(&ver));
+                            assert_eq!(mat, pver.contains(ver));
                         }
                         let cap: SemverCompatibility = ver.into();
                         mat.then_some(cap)
@@ -712,7 +713,7 @@ mod test {
         ];
         let vers = raw_vers.map(|raw_ver| semver::Version::parse(raw_ver).unwrap());
         assert!(vers.is_sorted());
-        assert!(vers.is_sorted_by_key(|v| SemverCompatibility::from(v)));
+        assert!(vers.is_sorted_by_key(SemverCompatibility::from));
         let reqs = vers.clone().map(|v| SemverPubgrub::singleton(v.clone()));
         for pver in &reqs {
             pver.as_singleton().unwrap();
@@ -728,7 +729,7 @@ mod test {
         for preq in req_unions {
             let set: HashSet<SemverCompatibility> = vers
                 .iter()
-                .filter(|ver| preq.contains(&ver))
+                .filter(|ver| preq.contains(ver))
                 .map(|ver| ver.into())
                 .collect();
             let only_one_comp = preq.only_one_compatibility_range();
