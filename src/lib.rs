@@ -195,28 +195,85 @@ impl<V: VersionLike> SemverPubgrub<V> {
         })
     }
 
-    /// Returns a simpler range that contains the same versions
+    /// Widens intervals and merges them when no supplied version separates them.
     ///
-    /// For every one of the Versions provided in versions the existing range and
-    /// the simplified range will agree on whether it is contained.
-    /// The simplified version may include or exclude versions that are not in versions as the implementation wishes.
-    /// For example:
-    ///  - If all the versions are contained in the original than the range will be simplified to `full`.
-    ///  - If none of the versions are contained in the original than the range will be simplified to `empty`.
+    /// The result is a superset of self and agrees with self on every supplied version.
+    /// Versions not in the slice may be added, but no versions are removed.
+    /// Normal releases and prereleases are widened separately.
     ///
-    /// If versions are not sorted the correctness of this function is not guaranteed.
+    /// The `versions` slice must be in nondecreasing order.
+    pub fn widen_versions<BV>(&self, versions: &[BV]) -> Self
+    where
+        BV: Borrow<V>,
+    {
+        debug_assert!(
+            versions.is_sorted_by(|left, right| left.borrow() <= right.borrow()),
+            "`widen_versions` `versions` argument incorrectly sorted"
+        );
+        let (normal, pre): (Vec<&V>, Vec<&V>) = versions
+            .iter()
+            .map(|v| v.borrow())
+            .partition(|v| v.pre().is_empty());
+        Self {
+            normal: self.normal.widen_versions(&normal),
+            pre: self.pre.widen_versions(&pre),
+        }
+    }
+
+    /// Tightens bounded interval ends to the outermost supplied versions they contain.
+    ///
+    /// The result is a subset of self and agrees with self on every supplied version.
+    /// Versions not in the slice may be removed, but no versions are added.
+    /// Unbounded ends and intervals containing no supplied versions are kept unchanged.
+    /// Normal releases and prereleases are narrowed separately.
+    ///
+    /// This is the display-oriented counterpart to [`Self::widen_versions`].
+    /// The `versions` slice must be in nondecreasing order.
+    pub fn narrow_versions<BV>(&self, versions: &[BV]) -> Self
+    where
+        BV: Borrow<V>,
+    {
+        debug_assert!(
+            versions.is_sorted_by(|left, right| left.borrow() <= right.borrow()),
+            "`narrow_versions` `versions` argument incorrectly sorted"
+        );
+        let (normal, pre): (Vec<&V>, Vec<&V>) = versions
+            .iter()
+            .map(|v| v.borrow())
+            .partition(|v| v.pre().is_empty());
+        Self {
+            normal: self.normal.narrow_versions(&normal),
+            pre: self.pre.narrow_versions(&pre),
+        }
+    }
+
+    /// Returns a simpler representation that agrees with self on the supplied versions.
+    ///
+    /// Versions not supplied may be added or removed.
+    /// Normal releases and prereleases are simplified independently. Within each component,
+    /// singleton ranges and ranges with no matching supplied versions are preserved.
+    /// Otherwise, if every supplied version of that kind matches, the component becomes full.
+    ///
+    /// The `versions` iterator must be in nondecreasing order.
+    /// See [`Self::widen_versions`] and [`Self::narrow_versions`] for operations that
+    /// only add or only remove versions, respectively.
     pub fn simplify<'v, I, BV>(&self, versions: I) -> Self
     where
-        I: Iterator<Item = BV> + Clone + 'v,
+        I: Iterator<Item = BV> + 'v,
         BV: Borrow<V> + 'v,
     {
+        let (normal, pre): (Vec<_>, Vec<_>) = versions.partition(|v| v.borrow().pre().is_empty());
+        debug_assert!(
+            normal.is_sorted_by(|left, right| left.borrow() <= right.borrow()),
+            "`simplify` `versions` argument incorrectly sorted"
+        );
+        debug_assert!(
+            pre.is_sorted_by(|left, right| left.borrow() <= right.borrow()),
+            "`simplify` `versions` argument incorrectly sorted"
+        );
         Self {
-            normal: self
-                .normal
-                .simplify(versions.clone().filter(|v| v.borrow().pre().is_empty())),
-            pre: self
-                .pre
-                .simplify(versions.filter(|v| !v.borrow().pre().is_empty())),
+            normal: self.normal.simplify(normal.into_iter()),
+            pre: self.pre.simplify(pre.into_iter()),
         }
     }
 
