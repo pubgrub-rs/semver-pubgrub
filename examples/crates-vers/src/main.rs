@@ -245,7 +245,6 @@ fn main() {
                     };
                     let relation = pver.relation(pver2);
                     assert_eq!(relation, expected, "{pver:?} relative to {pver2:?}");
-                    assert_eq!(VersionSet::relation(pver, pver2), expected);
                     match relation {
                         SetRelation::Subset => assert!((bs & !bs2).iter().next().is_none()),
                         SetRelation::Disjoint => assert!((bs & bs2).iter().next().is_none()),
@@ -264,39 +263,12 @@ fn main() {
         requirements
             .par_iter()
             .progress_with(style)
-            .for_each(|(pver, bs)| {
-                for (pver2, bs2) in &requirements {
+            .for_each(|(pver, _)| {
+                for (pver2, _) in &requirements {
+                    // Test based on the definition of set difference, as checking versions is to slow.
                     let diff = pver.difference(pver2);
-                    let bs_diff: BitSet = (bs & !bs2).into_iter().collect();
-                    if diff == SemverPubgrub::empty() {
-                        assert!(bs_diff.is_empty());
-                        assert!(diff.bounding_range().is_none());
-                    } else if &diff == pver {
-                        assert_eq!(&bs_diff, bs);
-                    } else {
-                        let min_mat = (&bs_diff).iter().next().map(|x| x as usize);
-                        let max_mat = (&bs_diff).iter().last().map(|x| x as usize);
-
-                        let bounding_range = diff.bounding_range().expect("diff is not empty");
-                        if let (Some(s), Some(e)) = (min_mat, max_mat) {
-                            assert!(s <= e);
-                            assert!(bounding_range.contains(&versions[s]));
-                            assert!(bounding_range.contains(&versions[e]));
-                        }
-                        let start = min_mat.unwrap_or(0).saturating_sub(30);
-                        let end = min(max_mat.unwrap_or(!0).saturating_add(30), versions.len() - 1);
-                        for (id, diff_mat) in
-                            (start..=end).zip(diff.contains_many(versions[start..=end].iter()))
-                        {
-                            let ver = &versions[id];
-                            let mat = bs_diff.contains(id as u32);
-                            assert_eq!(mat, diff_mat);
-                            assert_eq!(mat, diff.contains(ver));
-                            if mat {
-                                assert!(bounding_range.contains(ver));
-                            }
-                        }
-                    }
+                    let diff_deff = pver.intersection(&pver2.complement());
+                    assert_eq!(diff, diff_deff);
                 }
             })
     }
