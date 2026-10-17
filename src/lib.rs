@@ -158,26 +158,40 @@ where
 impl<V: VersionLike> SemverPubgrub<V> {
     /// Returns true if this range contains the specified values.
     ///
-    /// The `versions` iterator must be sorted.
+    /// The `versions` iterator must be in nondecreasing order.
     /// Functionally equivalent to `versions.map(|v| self.contains(v))`.
-    /// Except it runs in `O(size_of_range + len_of_versions)` not `O(size_of_range * len_of_versions)`
+    /// Walks the versions and both sets of intervals in a single pass.
     pub fn contains_many<'s, I, BV>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
     where
-        I: Iterator<Item = BV> + Clone + 's,
+        I: Iterator<Item = BV> + 's,
         BV: Borrow<V> + 's,
     {
-        let mut n_iter = self
-            .normal
-            .contains_many(versions.clone().filter(|v| v.borrow().pre().is_empty()));
-        let mut p_iter = self
-            .pre
-            .contains_many(versions.clone().filter(|v| !v.borrow().pre().is_empty()));
-        versions.filter_map(move |v| {
-            if v.borrow().pre().is_empty() {
-                n_iter.next()
+        let mut normal = self.normal.iter().peekable();
+        let mut pre = self.pre.iter().peekable();
+
+        versions.map(move |item| {
+            let version = item.borrow();
+            let intervals = if version.pre().is_empty() {
+                &mut normal
             } else {
-                p_iter.next()
+                &mut pre
+            };
+
+            // Skip intervals that end before this version.
+            while intervals.peek().is_some_and(|(_, end)| match end {
+                Bound::Included(end) => *end < version,
+                Bound::Excluded(end) => *end <= version,
+                Bound::Unbounded => false,
+            }) {
+                intervals.next();
             }
+
+            // The remaining interval's upper bound already allows this version.
+            intervals.peek().is_some_and(|(start, _)| match start {
+                Bound::Included(start) => *start <= version,
+                Bound::Excluded(start) => *start < version,
+                Bound::Unbounded => true,
+            })
         })
     }
 
@@ -370,6 +384,14 @@ impl<V: std::fmt::Debug + Display + VersionLike + Hash> VersionSet for SemverPub
 
     fn contains(&self, v: &V) -> bool {
         self.contains(v)
+    }
+
+    fn contains_many<'s, I, BV>(&'s self, versions: I) -> impl Iterator<Item = bool> + 's
+    where
+        I: Iterator<Item = BV> + 's,
+        BV: Borrow<Self::V> + 's,
+    {
+        SemverPubgrub::contains_many(self, versions)
     }
 
     fn union(&self, other: &Self) -> Self {

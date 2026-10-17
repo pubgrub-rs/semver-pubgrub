@@ -3,7 +3,7 @@ use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressStyle};
-use pubgrub::{SetRelation, VersionSet};
+use pubgrub::SetRelation;
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
 use semver_pubgrub::{SemverCompatibility, SemverPubgrub, SmallVersion, VersionLike};
@@ -86,7 +86,6 @@ fn main() {
     let intersection = arg.is_empty() || arg.contains(&"intersection".to_string());
     let difference = arg.is_empty() || arg.contains(&"difference".to_string());
     let relation = arg.is_empty() || arg.contains(&"relation".to_string());
-    let contains = arg.is_empty() || arg.contains(&"contains".to_string());
 
     let Some((versions, requirements)) = read_files() else {
         panic!("no files");
@@ -127,33 +126,34 @@ fn main() {
         .map(|(req, pver)| {
             let neg = pver.complement();
             let mut bitset = BitSet::new();
-            for (((id, ver), pver_mat), neg_mat) in versions
-                .iter()
-                .enumerate()
-                .zip(pver.contains_many(versions.iter()))
-                .zip(neg.contains_many(versions.iter()))
-            {
+            let mut pver_matches = pver.contains_many(versions.iter());
+            let mut neg_matches = neg.contains_many(versions.iter());
+            for (id, ver) in versions.iter().enumerate() {
+                let pver_mat = pver_matches.next().expect("missing membership result");
+                let neg_mat = neg_matches
+                    .next()
+                    .expect("missing complement membership result");
                 let mat = req.matches(ver);
-                if contains {
-                    assert_eq!(pver.contains(ver), pver_mat);
-                    assert_eq!(neg.contains(ver), neg_mat);
-                }
+                assert_eq!(pver.contains(ver), pver_mat);
+                assert_eq!(neg.contains(ver), neg_mat);
                 if mat != pver_mat {
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&pver);
-                    assert_eq!(req.matches(ver), pver.contains(ver));
+                    assert_eq!(mat, pver_mat);
                 }
                 if !mat != neg_mat {
                     eprintln!("{}", ver);
                     eprintln!("{}", req);
                     dbg!(&neg);
-                    assert_eq!(!req.matches(ver), neg.contains(ver));
+                    assert_eq!(!mat, neg_mat);
                 }
                 if mat {
                     bitset.add(id.try_into().unwrap());
                 }
             }
+            assert_eq!(pver_matches.count(), 0);
+            assert_eq!(neg_matches.count(), 0);
             if !bitset.is_empty() {
                 let s = &versions[(&bitset).iter().next().unwrap() as usize];
                 let e = &versions[(&bitset).iter().last().unwrap() as usize];
@@ -215,9 +215,7 @@ fn main() {
                         {
                             let ver = &versions[id as usize];
                             let mat = bs_inter.contains(id as u32);
-                            if contains {
-                                assert_eq!(inter.contains(ver), inter_mat);
-                            }
+                            assert_eq!(inter.contains(ver), inter_mat);
                             assert_eq!(mat, inter.contains(ver));
                         }
                     }

@@ -23,10 +23,30 @@ fn contains(req: &semver::VersionReq, ver: &semver::Version) {
     }
 }
 
-fn case(req: Vec<ArbitraryComparator>, ver: ArbitraryVersion) {
-    let req: VersionReq = req.into_iter().map(|r| r.to_comparator()).collect();
-    let ver = ver.to_version();
-    contains(&req, &ver);
+fn contains_many(pver: &SemverPubgrub<Version>, versions: &[Version]) {
+    let expected: Vec<_> = versions.iter().map(|ver| pver.contains(ver)).collect();
+    assert_eq!(
+        pver.contains_many(versions.iter()).collect::<Vec<_>>(),
+        expected
+    );
 }
 
-fuzz_target!(|seed: (Vec<ArbitraryComparator>, ArbitraryVersion)| case(seed.0, seed.1));
+fn case(req: Vec<ArbitraryComparator>, versions: Vec<ArbitraryVersion>) {
+    let req: VersionReq = req.into_iter().map(|r| r.to_comparator()).collect();
+    let mut versions: Vec<_> = versions.into_iter().map(|v| v.to_version()).collect();
+    versions.sort();
+    for ver in &versions {
+        contains(&req, ver);
+    }
+
+    let pver: SemverPubgrub<Version> = (&req).into();
+    contains_many(&pver, &versions);
+    contains_many(&pver.complement(), &versions);
+    contains_many(&SemverPubgrub::empty(), &versions);
+    contains_many(&SemverPubgrub::full(), &versions);
+    for ver in &versions {
+        contains_many(&SemverPubgrub::singleton(ver.clone()), &versions);
+    }
+}
+
+fuzz_target!(|seed: (Vec<ArbitraryComparator>, Vec<ArbitraryVersion>)| case(seed.0, seed.1));
