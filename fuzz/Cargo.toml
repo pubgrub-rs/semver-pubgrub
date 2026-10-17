@@ -11,6 +11,7 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 semver = "1.0.13"
 arbitrary = { version = "1", features = ["derive"] }
+pubgrub = { git="https://github.com/pubgrub-rs/pubgrub", branch="main" }
 
 [dependencies.semver-pubgrub]
 path = ".."
@@ -43,5 +44,11 @@ doc = false
 [[bin]]
 name = "difference"
 path = "fuzz_targets/difference.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "relation"
+path = "fuzz_targets/relation.rs"
 test = false
 doc = false

@@ -155,6 +155,7 @@ dependencies = [
  "crates-index",
  "hibitset",
  "indicatif",
+ "pubgrub",
  "rayon",
  "semver",
  "semver-pubgrub",

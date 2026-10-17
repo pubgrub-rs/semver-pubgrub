@@ -3,6 +3,7 @@ use std::{cmp::min, collections::BTreeSet};
 
 use hibitset::{BitSet, BitSetLike};
 use indicatif::{ParallelProgressIterator, ProgressBar, ProgressFinish, ProgressStyle};
+use pubgrub::{SetRelation, VersionSet};
 use rayon::prelude::*;
 use semver::{Version, VersionReq};
 use semver_pubgrub::{SemverCompatibility, SemverPubgrub, SmallVersion, VersionLike};
@@ -84,6 +85,7 @@ fn main() {
 
     let intersection = arg.is_empty() || arg.contains(&"intersection".to_string());
     let difference = arg.is_empty() || arg.contains(&"difference".to_string());
+    let relation = arg.is_empty() || arg.contains(&"relation".to_string());
     let contains = arg.is_empty() || arg.contains(&"contains".to_string());
 
     let Some((versions, requirements)) = read_files() else {
@@ -223,6 +225,36 @@ fn main() {
             })
     }
 
+    if relation {
+        let template = "relation: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
+        let style = ProgressBar::new(requirements.len() as u64)
+            .with_style(ProgressStyle::with_template(template).unwrap())
+            .with_finish(ProgressFinish::AndLeave);
+
+        requirements
+            .par_iter()
+            .progress_with(style)
+            .for_each(|(pver, bs)| {
+                for (pver2, bs2) in &requirements {
+                    let expected = if pver.subset_of(pver2) {
+                        SetRelation::Subset
+                    } else if pver.is_disjoint(pver2) {
+                        SetRelation::Disjoint
+                    } else {
+                        SetRelation::Overlapping
+                    };
+                    let relation = pver.relation(pver2);
+                    assert_eq!(relation, expected, "{pver:?} relative to {pver2:?}");
+                    assert_eq!(VersionSet::relation(pver, pver2), expected);
+                    match relation {
+                        SetRelation::Subset => assert!((bs & !bs2).iter().next().is_none()),
+                        SetRelation::Disjoint => assert!((bs & bs2).iter().next().is_none()),
+                        SetRelation::Overlapping => {}
+                    }
+                }
+            })
+    }
+
     if difference {
         let template = "difference: [Time: {elapsed}, Rate: {per_sec}, Remaining: {eta}] {wide_bar} {pos:>6}/{len:6}: {percent:>3}%";
         let style = ProgressBar::new(requirements.len() as u64)
@@ -242,12 +274,21 @@ fn main() {
                     } else if &diff == pver {
                         assert_eq!(&bs_diff, bs);
                     } else {
+                        let min_mat = (&bs_diff).iter().next().map(|x| x as usize);
+                        let max_mat = (&bs_diff).iter().last().map(|x| x as usize);
+
                         let bounding_range = diff.bounding_range().expect("diff is not empty");
-                        for ((id, ver), diff_mat) in versions
-                            .iter()
-                            .enumerate()
-                            .zip(diff.contains_many(versions.iter()))
+                        if let (Some(s), Some(e)) = (min_mat, max_mat) {
+                            assert!(s <= e);
+                            assert!(bounding_range.contains(&versions[s]));
+                            assert!(bounding_range.contains(&versions[e]));
+                        }
+                        let start = min_mat.unwrap_or(0).saturating_sub(30);
+                        let end = min(max_mat.unwrap_or(!0).saturating_add(30), versions.len() - 1);
+                        for (id, diff_mat) in
+                            (start..=end).zip(diff.contains_many(versions[start..=end].iter()))
                         {
+                            let ver = &versions[id];
                             let mat = bs_diff.contains(id as u32);
                             assert_eq!(mat, diff_mat);
                             assert_eq!(mat, diff.contains(ver));

@@ -6,7 +6,7 @@ use std::{
     ops::Bound,
 };
 
-use pubgrub::{Ranges, VersionSet};
+use pubgrub::{Ranges, SetRelation, VersionSet};
 use semver::{BuildMetadata, Comparator, Op, Prerelease, Version, VersionReq};
 
 mod bump_helpers;
@@ -302,6 +302,23 @@ impl<V: VersionLike> SemverPubgrub<V> {
     pub fn subset_of(&self, other: &Self) -> bool {
         self.normal.subset_of(&other.normal) && self.pre.subset_of(&other.pre)
     }
+
+    /// Classifies self as a subset of, disjoint from, or overlapping with other.
+    pub fn relation(&self, other: &Self) -> SetRelation {
+        use SetRelation::*;
+
+        match (
+            self.normal.relation(&other.normal),
+            self.pre.relation(&other.pre),
+        ) {
+            (Subset, Subset) => Subset,
+            (Disjoint, Disjoint) => Disjoint,
+            // Empty components are both subsets and disjoint, but report Subset.
+            (Subset, Disjoint) if self.normal.is_empty() => Disjoint,
+            (Disjoint, Subset) if self.pre.is_empty() => Disjoint,
+            _ => Overlapping,
+        }
+    }
 }
 
 impl<V: VersionLike + Display> Display for SemverPubgrub<V> {
@@ -365,6 +382,10 @@ impl<V: std::fmt::Debug + Display + VersionLike + Hash> VersionSet for SemverPub
 
     fn subset_of(&self, other: &Self) -> bool {
         self.subset_of(other)
+    }
+
+    fn relation(&self, other: &Self) -> SetRelation {
+        self.relation(other)
     }
 }
 
